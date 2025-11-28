@@ -57,8 +57,10 @@ export const analyzeImageOrText = async (
       items: items,
       clarification: result.clarificationNeeded ? result.clarificationQuestion : undefined,
     };
-  } catch (error) {
-    throw new Error("Failed to analyze food. Please try again.");
+  } catch (error: any) {
+    // Pass the actual error message (e.g., "API Key missing") to the caller/alert
+    alert(`Analysis failed: ${error.message}`);
+    throw error;
   }
 };
 
@@ -93,8 +95,8 @@ export const refineAnalyzedLogs = async (
             message: result.assistantResponse
         };
 
-    } catch (e) {
-        return { items: currentItems, message: "Sorry, I couldn't process that update." };
+    } catch (e: any) {
+        return { items: currentItems, message: `Error: ${e.message}` };
     }
 }
 
@@ -110,8 +112,8 @@ export const estimateExerciseCalories = async (
         calories: result.calories || 0,
         note: result.note || "" 
     };
-  } catch (e) {
-    return { calories: duration * 2, note: "Could not connect to AI. Used standard fallback." }; 
+  } catch (e: any) {
+    return { calories: duration * 2, note: `Connection error: ${e.message}. Using fallback.` }; 
   }
 }
 
@@ -135,7 +137,7 @@ export const chatWithNutritionist = async (
   try {
     const result = await callApi('chatWithNutritionist', { history, message, context });
     return result.text;
-  } catch (error) {
-    return "I'm having trouble connecting to my knowledge base right now. Please try again later.";
+  } catch (error: any) {
+    return `Error connecting to assistant: ${error.message}`;
   }
 };

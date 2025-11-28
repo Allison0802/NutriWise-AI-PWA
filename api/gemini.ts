@@ -1,6 +1,17 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 
-const genAI = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Helper to strip Markdown code blocks from JSON responses
+function cleanJSON(text: string | undefined): string {
+  if (!text) return "{}";
+  let cleaned = text.trim();
+  // Remove ```json ... ``` or just ``` ... ``` wrappers
+  if (cleaned.startsWith("```json")) {
+    cleaned = cleaned.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+  } else if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```\s*/, "").replace(/\s*```$/, "");
+  }
+  return cleaned;
+}
 
 const foodAnalysisSchema: Schema = {
   type: Type.OBJECT,
@@ -57,6 +68,13 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
+  // CRITICAL: Check for API Key
+  if (!process.env.API_KEY) {
+    console.error("API_KEY is missing in environment variables.");
+    return res.status(500).json({ error: "Server Configuration Error: API_KEY is missing." });
+  }
+
+  const genAI = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const { action, payload } = req.body;
 
   try {
@@ -88,7 +106,9 @@ export default async function handler(req: any, res: any) {
           systemInstruction: "You are a specialized nutritionist AI. Your estimates should be evidence-based. If an image is blurry or ambiguous, mark confidence as low.",
         },
       });
-      return res.status(200).json(JSON.parse(response.text || "{}"));
+      
+      const jsonStr = cleanJSON(response.text);
+      return res.status(200).json(JSON.parse(jsonStr));
     }
 
     if (action === 'refineAnalyzedLogs') {
@@ -113,7 +133,8 @@ export default async function handler(req: any, res: any) {
           responseSchema: refinementSchema,
         }
       });
-      return res.status(200).json(JSON.parse(response.text || "{}"));
+      const jsonStr = cleanJSON(response.text);
+      return res.status(200).json(JSON.parse(jsonStr));
     }
 
     if (action === 'estimateExerciseCalories') {
@@ -153,7 +174,8 @@ export default async function handler(req: any, res: any) {
           }
         }
       });
-      return res.status(200).json(JSON.parse(response.text || "{}"));
+      const jsonStr = cleanJSON(response.text);
+      return res.status(200).json(JSON.parse(jsonStr));
     }
 
     if (action === 'getPersonalizedAdvice') {
@@ -204,6 +226,7 @@ export default async function handler(req: any, res: any) {
 
   } catch (error: any) {
     console.error("API Error:", error);
+    // Return the actual error message so the client knows if it's an API Key issue
     res.status(500).json({ error: error.message || "Internal Server Error" });
   }
 }
