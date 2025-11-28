@@ -24,8 +24,9 @@ const callApi = async (action: string, payload: any) => {
     } else {
       // If not JSON, read as text (this catches Vercel 500/404 HTML/Text pages)
       const text = await response.text();
+      console.error("Server returned non-JSON response:", text);
       // Try to extract a meaningful message from HTML if possible, or just return text
-      const errorMessage = text.length < 200 ? text : `Server Error (${response.status})`;
+      const errorMessage = text.length < 200 ? text : `Server Error (${response.status}): Check Vercel logs.`;
       throw new Error(errorMessage);
     }
 

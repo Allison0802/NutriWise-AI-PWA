@@ -68,6 +68,8 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
+  console.log("Gemini API Invoked");
+
   // CRITICAL: Check for API Key
   if (!process.env.API_KEY) {
     console.error("API_KEY is missing in environment variables.");
@@ -76,12 +78,15 @@ export default async function handler(req: any, res: any) {
 
   // Validate Body
   if (!req.body) {
+    console.error("Missing request body");
     return res.status(400).json({ error: "Missing request body" });
   }
 
   try {
     const genAI = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const { action, payload } = req.body;
+
+    console.log(`Processing action: ${action}`);
 
     if (!action) {
          return res.status(400).json({ error: "Missing action in request body" });
@@ -234,7 +239,7 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'Invalid action' });
 
   } catch (error: any) {
-    console.error("API Error:", error);
+    console.error("API Error details:", error);
     // Return the actual error message so the client knows if it's an API Key issue
     res.status(500).json({ error: error.message || "Internal Server Error" });
   }
