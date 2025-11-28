@@ -1,0 +1,7 @@
+{
+  "name": "NutriWise AI",
+  "description": "A scientific, AI-powered nutrition and body composition tracker. Log food via photos or text, track macros, and get personalized, evidence-based advice for your health goals.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
