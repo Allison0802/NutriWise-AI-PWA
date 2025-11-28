@@ -81,16 +81,56 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
       };
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const resizeImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const MAX_WIDTH = 1024;
+          const MAX_HEIGHT = 1024;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          // Compress to JPEG at 0.7 quality to save space and ensure upload success
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          resolve(dataUrl.split(',')[1]); // Return just base64 data
+        };
+        img.onerror = (error) => reject(error);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        const base64Data = base64String.split(',')[1];
-        setSelectedImage(base64Data);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const resizedBase64 = await resizeImage(file);
+        setSelectedImage(resizedBase64);
+      } catch (error) {
+        console.error("Image processing failed", error);
+        alert("Failed to process image. Please try another one.");
+      }
     }
   };
 
@@ -292,7 +332,7 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
                         ref={fileInputRef}
                         type="file" 
                         accept="image/*" 
-                        capture="environment" 
+                        // capture attribute removed to allow gallery selection
                         className="hidden" 
                         onChange={handleImageUpload}
                     />
