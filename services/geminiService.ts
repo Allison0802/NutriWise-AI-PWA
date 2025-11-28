@@ -12,12 +12,23 @@ const callApi = async (action: string, payload: any) => {
       body: JSON.stringify({ action, payload }),
     });
 
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error || 'API request failed');
+    const contentType = response.headers.get("content-type");
+    
+    // Check if the response is actually JSON
+    if (contentType && contentType.includes("application/json")) {
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'API request failed');
+      }
+      return data;
+    } else {
+      // If not JSON, read as text (this catches Vercel 500/404 HTML/Text pages)
+      const text = await response.text();
+      // Try to extract a meaningful message from HTML if possible, or just return text
+      const errorMessage = text.length < 200 ? text : `Server Error (${response.status})`;
+      throw new Error(errorMessage);
     }
 
-    return await response.json();
   } catch (error) {
     console.error(`Gemini Service Error (${action}):`, error);
     throw error;
@@ -32,7 +43,6 @@ export const analyzeImageOrText = async (
     const result = await callApi('analyzeImageOrText', { textInput, imageBase64 });
     
     // Post-process to add base values for client-side scaling
-    // We do this on client side now based on the raw data returned from server
     const items: FoodItem[] = (result.items || []).map((item: any) => {
         const qty = item.quantityAmount || 1;
         return {
@@ -58,7 +68,6 @@ export const analyzeImageOrText = async (
       clarification: result.clarificationNeeded ? result.clarificationQuestion : undefined,
     };
   } catch (error: any) {
-    // Pass the actual error message (e.g., "API Key missing") to the caller/alert
     alert(`Analysis failed: ${error.message}`);
     throw error;
   }

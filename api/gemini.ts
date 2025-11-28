@@ -74,10 +74,19 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({ error: "Server Configuration Error: API_KEY is missing." });
   }
 
-  const genAI = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const { action, payload } = req.body;
+  // Validate Body
+  if (!req.body) {
+    return res.status(400).json({ error: "Missing request body" });
+  }
 
   try {
+    const genAI = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const { action, payload } = req.body;
+
+    if (!action) {
+         return res.status(400).json({ error: "Missing action in request body" });
+    }
+
     if (action === 'analyzeImageOrText') {
       const { textInput, imageBase64 } = payload;
       const parts: any[] = [];
