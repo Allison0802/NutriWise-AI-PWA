@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nutriwise-cache-v2';
+const CACHE_NAME = 'nutriwise-cache-v4';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -17,18 +17,23 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Network first, then cache for API calls or critical assets could be better,
-  // but for this PWA shell, Stale-While-Revalidate or Cache First is common.
-  // We will keep the existing strategy but ensure version bumping works.
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        if (response) {
-          return response;
-        }
-        return fetch(event.request);
-      })
-  );
+  // Network first strategy for HTML to ensure we always get the latest app
+  // Stale-while-revalidate for assets
+  const requestUrl = new URL(event.request.url);
+
+  if (requestUrl.pathname === '/' || requestUrl.pathname === '/index.html') {
+    event.respondWith(
+      fetch(event.request)
+        .catch(() => caches.match(event.request))
+    );
+  } else {
+    event.respondWith(
+      caches.match(event.request)
+        .then((response) => {
+          return response || fetch(event.request);
+        })
+    );
+  }
 });
 
 self.addEventListener('activate', (event) => {

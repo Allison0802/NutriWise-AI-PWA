@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 // Helper to strip Markdown code blocks from JSON responses
 function cleanJSON(text: string | undefined): string {
@@ -13,7 +13,8 @@ function cleanJSON(text: string | undefined): string {
   return cleaned;
 }
 
-const foodAnalysisSchema: Schema = {
+// Use 'any' for schema to avoid strict type issues during runtime/build mismatches
+const foodAnalysisSchema: any = {
   type: Type.OBJECT,
   properties: {
     items: {
@@ -40,7 +41,7 @@ const foodAnalysisSchema: Schema = {
   required: ["items", "clarificationNeeded"],
 };
 
-const refinementSchema: Schema = {
+const refinementSchema: any = {
   type: Type.OBJECT,
   properties: {
     updatedItems: {
@@ -83,7 +84,14 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const genAI = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    let genAI;
+    try {
+        genAI = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    } catch (initError: any) {
+        console.error("Failed to initialize GoogleGenAI:", initError);
+        return res.status(500).json({ error: `AI Client Init Failed: ${initError.message}` });
+    }
+
     const { action, payload } = req.body;
 
     console.log(`Processing action: ${action}`);
