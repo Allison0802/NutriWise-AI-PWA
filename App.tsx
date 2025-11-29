@@ -96,6 +96,12 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDeleteLog = (id: string) => {
+    if (window.confirm("Are you sure you want to delete this entry?")) {
+        setLogs(prev => prev.filter(log => log.id !== id));
+    }
+  };
+
   const handleEditLog = (entry: LogEntry) => {
     setEditingLog(entry);
     setView('add');
@@ -234,6 +240,7 @@ const App: React.FC = () => {
                     profile={profile} 
                     onViewHistory={() => setView('history')} 
                     onEdit={handleEditLog}
+                    onDelete={handleDeleteLog}
                 />
               </div>
           </div>
@@ -244,6 +251,7 @@ const App: React.FC = () => {
                 logs={logs} 
                 onBack={() => setView('dashboard')} 
                 onEdit={handleEditLog}
+                onDelete={handleDeleteLog}
             />
         )}
 

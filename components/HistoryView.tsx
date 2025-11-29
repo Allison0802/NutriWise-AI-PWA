@@ -2,15 +2,16 @@
 import React, { useMemo } from 'react';
 import { LogEntry } from '../types';
 import { format } from 'date-fns';
-import { Edit2, ArrowLeft } from 'lucide-react';
+import { Edit2, ArrowLeft, Trash2 } from 'lucide-react';
 
 interface HistoryViewProps {
   logs: LogEntry[];
   onBack: () => void;
   onEdit: (entry: LogEntry) => void;
+  onDelete: (id: string) => void;
 }
 
-const HistoryView: React.FC<HistoryViewProps> = ({ logs, onBack, onEdit }) => {
+const HistoryView: React.FC<HistoryViewProps> = ({ logs, onBack, onEdit, onDelete }) => {
   const groupedLogs = useMemo(() => {
     const groups: { [key: string]: LogEntry[] } = {};
     logs.forEach(log => {
@@ -42,7 +43,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ logs, onBack, onEdit }) => {
                 .map(log => (
                 <div key={log.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-start gap-3 relative group">
                     <div className={`mt-1 w-2 h-2 rounded-full ${log.type === 'food' ? 'bg-emerald-400' : log.type === 'exercise' ? 'bg-orange-400' : 'bg-blue-400'}`} />
-                    <div className="flex-1 pr-8">
+                    <div className="flex-1 pr-14">
                         <div className="flex justify-between">
                             <span className="text-sm font-medium text-slate-800 capitalize">{log.type}</span>
                             <span className="text-xs text-slate-400">{format(new Date(log.timestamp), 'h:mm a')}</span>
@@ -66,12 +67,20 @@ const HistoryView: React.FC<HistoryViewProps> = ({ logs, onBack, onEdit }) => {
                             <p className="text-sm text-slate-600 mt-1 italic">"{log.noteContent}"</p>
                         )}
                     </div>
-                    <button 
-                        onClick={() => onEdit(log)}
-                        className="absolute right-3 top-3 p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                    >
-                        <Edit2 size={16} />
-                    </button>
+                    <div className="absolute right-3 top-3 flex gap-1">
+                        <button 
+                            onClick={() => onEdit(log)}
+                            className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                        >
+                            <Edit2 size={16} />
+                        </button>
+                        <button 
+                            onClick={() => onDelete(log.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    </div>
                 </div>
               ))}
             </div>
