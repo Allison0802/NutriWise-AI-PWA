@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { UserProfile, LogEntry, ViewState, ChatMessage } from './types';
 import Dashboard from './components/Dashboard';
@@ -5,7 +6,7 @@ import EntryForm from './components/EntryForm';
 import ChatInterface from './components/ChatInterface';
 import HistoryView from './components/HistoryView';
 import { getPersonalizedAdvice, chatWithNutritionist, getInstantFeedback } from './services/geminiService';
-import { Home, PlusCircle, MessageCircle, User, Activity, CheckCircle, X, Loader2 } from 'lucide-react';
+import { Home, PlusCircle, MessageCircle, User, Activity, CheckCircle, X, Loader2, Download, Upload } from 'lucide-react';
 
 // Default initial state
 const INITIAL_PROFILE: UserProfile = {
@@ -80,19 +81,17 @@ const App: React.FC = () => {
     if (editingLog) {
       setLogs(prev => prev.map(log => log.id === entry.id ? entry : log));
       setEditingLog(null);
-      if (entry.type !== 'note') setView('dashboard');
+      setView('dashboard');
     } else {
       setLogs(prev => [entry, ...prev]);
-      if (entry.type !== 'note') {
-         setView('dashboard');
-         // Trigger Feedback for new Food/Exercise logs
-         setFeedbackModal({ isOpen: true, isLoading: true, message: null });
-         try {
-             const message = await getInstantFeedback(entry, profile);
-             setFeedbackModal({ isOpen: true, isLoading: false, message });
-         } catch (e) {
-             setFeedbackModal({ isOpen: false, isLoading: false, message: null });
-         }
+      setView('dashboard');
+      // Trigger Feedback for all new logs (Food, Exercise, Note)
+      setFeedbackModal({ isOpen: true, isLoading: true, message: null });
+      try {
+           const message = await getInstantFeedback(entry, profile);
+           setFeedbackModal({ isOpen: true, isLoading: false, message });
+      } catch (e) {
+           setFeedbackModal({ isOpen: false, isLoading: false, message: null });
       }
     }
   };
@@ -142,6 +141,42 @@ const App: React.FC = () => {
 
   const closeFeedbackModal = () => {
       setFeedbackModal({ isOpen: false, isLoading: false, message: null });
+  };
+
+  const exportData = () => {
+      const data = { profile, logs };
+      const jsonString = JSON.stringify(data);
+      const blob = new Blob([jsonString], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "nutriwise_backup.json";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  };
+
+  const importData = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+              try {
+                  const content = e.target?.result as string;
+                  const data = JSON.parse(content);
+                  if (data.profile && data.logs) {
+                      setProfile(data.profile);
+                      setLogs(data.logs);
+                      alert("Data restored successfully!");
+                  } else {
+                      alert("Invalid backup file format.");
+                  }
+              } catch (error) {
+                  alert("Failed to parse backup file.");
+              }
+          };
+          reader.readAsText(file);
+      }
   };
 
   return (
@@ -280,6 +315,22 @@ const App: React.FC = () => {
                      </select>
                  </div>
                  <button className="w-full bg-slate-800 text-white py-3 rounded-xl font-medium mt-4" onClick={() => setView('dashboard')}>Save Profile</button>
+             
+                 <div className="pt-8 border-t border-slate-200 mt-8">
+                      <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-4">Data Management</h3>
+                      <div className="flex gap-3">
+                          <button onClick={exportData} className="flex-1 flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600">
+                              <Download size={24} className="mb-2 text-emerald-600"/>
+                              <span className="text-sm font-medium">Backup Data</span>
+                          </button>
+                          <label className="flex-1 flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600 cursor-pointer">
+                              <Upload size={24} className="mb-2 text-blue-600"/>
+                              <span className="text-sm font-medium">Restore Data</span>
+                              <input type="file" accept=".json" onChange={importData} className="hidden" />
+                          </label>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-2 text-center">Use this to move your data to the production URL.</p>
+                 </div>
              </div>
           </div>
         )}

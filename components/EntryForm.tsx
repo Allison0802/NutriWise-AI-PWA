@@ -39,11 +39,6 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
   const [exNote, setExNote] = useState<string>('');
   const [isEstimatingEx, setIsEstimatingEx] = useState(false);
 
-  // Note State
-  const [isNoteSaved, setIsNoteSaved] = useState(false);
-  const [noteReplyInput, setNoteReplyInput] = useState('');
-  const noteChatEndRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     if (initialEntry) {
       setActiveTab(initialEntry.type);
@@ -60,12 +55,6 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
       }
     }
   }, [initialEntry]);
-
-  useEffect(() => {
-    if (isNoteSaved) {
-      noteChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [chatHistory, isNoteSaved]);
 
   const getSafeProfile = (): UserProfile => {
       if (userProfile) return userProfile;
@@ -243,17 +232,6 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
           noteContent: textInput
       }
       onSave(newEntry);
-      
-      // Trigger inline chat mode
-      setIsNoteSaved(true);
-      onChat(textInput);
-  }
-
-  const handleNoteReply = async () => {
-      if(!noteReplyInput.trim()) return;
-      const text = noteReplyInput;
-      setNoteReplyInput('');
-      await onChat(text);
   }
 
   // Client-side Scaling
@@ -299,8 +277,8 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                disabled={!!initialEntry || isNoteSaved} 
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${activeTab === tab ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'} ${initialEntry || isNoteSaved ? 'opacity-75 cursor-default' : ''}`}
+                disabled={!!initialEntry} 
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${activeTab === tab ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'} ${initialEntry ? 'opacity-75 cursor-default' : ''}`}
               >
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
@@ -536,74 +514,14 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
 
          {activeTab === 'note' && (
             <div className="space-y-4">
-                {!isNoteSaved ? (
-                     <>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Daily Note</label>
-                            <textarea value={textInput} onChange={e => setTextInput(e.target.value)} placeholder="How are you feeling today?" className="w-full p-3 border rounded-xl h-40" />
-                        </div>
-                        <button onClick={saveNoteLog} className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold mt-4 flex items-center justify-center gap-2">
-                            <Check size={20} />
-                            {initialEntry ? 'Update Note' : 'Save & Chat'}
-                        </button>
-                    </>
-                ) : (
-                    <div className="flex flex-col h-[65vh]">
-                        {/* Summary of Logged Note */}
-                        <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm mb-4 shrink-0">
-                            <div className="flex items-center gap-2 mb-2">
-                                <div className="bg-emerald-100 p-1 rounded-full"><Check size={12} className="text-emerald-600"/></div>
-                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Note Logged</span>
-                            </div>
-                            <p className="text-slate-700 italic">"{textInput}"</p>
-                        </div>
-
-                        {/* Inline Chat History */}
-                        <div className="flex-1 overflow-y-auto bg-slate-50 rounded-xl p-4 mb-4 border border-slate-100 no-scrollbar">
-                            {chatHistory
-                                .filter(msg => msg.text !== STARTER_MESSAGE)
-                                .slice(-10)
-                                .map(msg => (
-                                 <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} mb-3`}>
-                                    <div className={`text-sm px-4 py-3 rounded-2xl max-w-[90%] shadow-sm ${msg.role === 'user' ? 'bg-emerald-600 text-white rounded-tr-sm' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-sm'}`}>
-                                        {msg.text}
-                                    </div>
-                                 </div>
-                            ))}
-                            {isChatLoading && (
-                                 <div className="flex justify-start">
-                                     <div className="bg-white border border-slate-200 px-4 py-3 rounded-2xl rounded-tl-sm shadow-sm">
-                                         <Loader2 className="w-4 h-4 text-emerald-500 animate-spin" />
-                                     </div>
-                                 </div>
-                             )}
-                            <div ref={noteChatEndRef} />
-                        </div>
-
-                        {/* Reply Input */}
-                        <div className="shrink-0 space-y-3">
-                             <div className="flex gap-2">
-                                 <input 
-                                    value={noteReplyInput} 
-                                    onChange={e => setNoteReplyInput(e.target.value)}
-                                    onKeyDown={e => e.key === 'Enter' && handleNoteReply()}
-                                    placeholder="Reply to AI..."
-                                    className="flex-1 border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" 
-                                 />
-                                 <button 
-                                    onClick={handleNoteReply} 
-                                    disabled={!noteReplyInput.trim() || isChatLoading}
-                                    className="bg-emerald-600 text-white p-3 rounded-xl disabled:opacity-50 hover:bg-emerald-700"
-                                >
-                                    <Send size={18}/>
-                                </button>
-                             </div>
-                             <button onClick={onCancel} className="w-full py-3 text-slate-400 text-sm font-medium hover:text-slate-600 uppercase tracking-wide">
-                                Return to Dashboard
-                             </button>
-                        </div>
-                    </div>
-                )}
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Daily Note</label>
+                    <textarea value={textInput} onChange={e => setTextInput(e.target.value)} placeholder="How are you feeling today?" className="w-full p-3 border rounded-xl h-40" />
+                </div>
+                <button onClick={saveNoteLog} className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold mt-4 flex items-center justify-center gap-2">
+                    <Check size={20} />
+                    {initialEntry ? 'Update Note' : 'Save Note'}
+                </button>
             </div>
         )}
       </div>

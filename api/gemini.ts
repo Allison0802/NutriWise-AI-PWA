@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 
 // Helper to strip Markdown code blocks from JSON responses
@@ -231,6 +232,7 @@ export default async function handler(req: any, res: any) {
           
           If it's food, comment on nutrients or choice.
           If it's exercise, comment on effort or burn.
+          If it's a note, be empathetic or responsive to the user's sentiment.
           Do NOT repeat the food name literally if possible, be natural.
         `,
       });
