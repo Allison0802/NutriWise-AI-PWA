@@ -139,6 +139,18 @@ export const getPersonalizedAdvice = async (
   }
 };
 
+export const getInstantFeedback = async (
+  entry: LogEntry,
+  profile: UserProfile
+): Promise<string> => {
+  try {
+    const result = await callApi('getInstantFeedback', { entry, profile });
+    return result.text;
+  } catch (e) {
+    return "Great job logging that!";
+  }
+};
+
 export const chatWithNutritionist = async (
   history: { role: string; parts: { text: string }[] }[],
   message: string,

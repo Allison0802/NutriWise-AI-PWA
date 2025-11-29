@@ -4,8 +4,8 @@ import Dashboard from './components/Dashboard';
 import EntryForm from './components/EntryForm';
 import ChatInterface from './components/ChatInterface';
 import HistoryView from './components/HistoryView';
-import { getPersonalizedAdvice, chatWithNutritionist } from './services/geminiService';
-import { Home, PlusCircle, MessageCircle, User, Activity } from 'lucide-react';
+import { getPersonalizedAdvice, chatWithNutritionist, getInstantFeedback } from './services/geminiService';
+import { Home, PlusCircle, MessageCircle, User, Activity, CheckCircle, X, Loader2 } from 'lucide-react';
 
 // Default initial state
 const INITIAL_PROFILE: UserProfile = {
@@ -45,6 +45,13 @@ const App: React.FC = () => {
   const [editingLog, setEditingLog] = useState<LogEntry | null>(null);
   const [isChatLoading, setIsChatLoading] = useState(false);
 
+  // Instant Feedback Modal State
+  const [feedbackModal, setFeedbackModal] = useState<{ isOpen: boolean; isLoading: boolean; message: string | null }>({
+    isOpen: false,
+    isLoading: false,
+    message: null,
+  });
+
   useEffect(() => {
     localStorage.setItem('nutriwise_logs', JSON.stringify(logs));
   }, [logs]);
@@ -69,15 +76,24 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logs.length]);
 
-  const handleSaveEntry = (entry: LogEntry) => {
+  const handleSaveEntry = async (entry: LogEntry) => {
     if (editingLog) {
       setLogs(prev => prev.map(log => log.id === entry.id ? entry : log));
       setEditingLog(null);
-      // Don't switch view if updating note (handled in EntryForm)
       if (entry.type !== 'note') setView('dashboard');
     } else {
       setLogs(prev => [entry, ...prev]);
-      if (entry.type !== 'note') setView('dashboard');
+      if (entry.type !== 'note') {
+         setView('dashboard');
+         // Trigger Feedback for new Food/Exercise logs
+         setFeedbackModal({ isOpen: true, isLoading: true, message: null });
+         try {
+             const message = await getInstantFeedback(entry, profile);
+             setFeedbackModal({ isOpen: true, isLoading: false, message });
+         } catch (e) {
+             setFeedbackModal({ isOpen: false, isLoading: false, message: null });
+         }
+      }
     }
   };
 
@@ -101,8 +117,6 @@ const App: React.FC = () => {
       // Pass the last 100 logs to provide historical context
       const recentLogs = logs.sort((a, b) => b.timestamp - a.timestamp).slice(0, 100);
 
-      // We pass the history excluding the just-added user message to avoid duplication in context if API requires it, 
-      // but standard practice with Gemini Chat helper is to pass previous history.
       const historyContext = chatHistory.map(m => ({
           role: m.role,
           parts: [{ text: m.text }]
@@ -126,9 +140,43 @@ const App: React.FC = () => {
       }]);
   };
 
+  const closeFeedbackModal = () => {
+      setFeedbackModal({ isOpen: false, isLoading: false, message: null });
+  };
+
   return (
     <div className="max-w-md mx-auto h-screen bg-slate-50 flex flex-col relative overflow-hidden shadow-2xl">
       
+      {/* Feedback Modal Overlay */}
+      {feedbackModal.isOpen && (
+          <div className="absolute inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
+              <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl transform transition-all scale-100">
+                  {feedbackModal.isLoading ? (
+                      <div className="flex flex-col items-center py-4">
+                          <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-3" />
+                          <p className="text-slate-600 font-medium animate-pulse">Analyzing your entry...</p>
+                      </div>
+                  ) : (
+                      <div className="text-center">
+                          <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4 text-emerald-600">
+                              <CheckCircle size={24} />
+                          </div>
+                          <h3 className="text-xl font-bold text-slate-800 mb-2">Logged!</h3>
+                          <p className="text-slate-600 mb-6 leading-relaxed">
+                              "{feedbackModal.message}"
+                          </p>
+                          <button 
+                              onClick={closeFeedbackModal}
+                              className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors"
+                          >
+                              Awesome
+                          </button>
+                      </div>
+                  )}
+              </div>
+          </div>
+      )}
+
       {/* Main Content Area - now overflow-hidden to let children handle scroll */}
       <main className="flex-1 overflow-hidden relative flex flex-col">
         {view === 'dashboard' && (
