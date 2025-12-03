@@ -159,11 +159,26 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
 
   const saveFoodLog = () => {
     if (!analyzedItems) return;
+    
+    // Sanitize items to ensure all numbers are valid numbers to prevent crashes
+    const sanitizedItems = analyzedItems.map(item => ({
+        ...item,
+        quantity: Number(item.quantity) || 0,
+        calories: Number(item.calories) || 0,
+        protein: Number(item.protein) || 0,
+        carbs: Number(item.carbs) || 0,
+        fat: Number(item.fat) || 0,
+        baseCalories: Number(item.baseCalories) || 0,
+        baseProtein: Number(item.baseProtein) || 0,
+        baseCarbs: Number(item.baseCarbs) || 0,
+        baseFat: Number(item.baseFat) || 0,
+    }));
+
     const newEntry: LogEntry = {
       id: initialEntry ? initialEntry.id : Date.now().toString(),
       timestamp: initialEntry ? initialEntry.timestamp : Date.now(),
       type: 'food',
-      items: analyzedItems,
+      items: sanitizedItems,
       image: selectedImage || undefined
     };
     onSave(newEntry);
@@ -217,7 +232,7 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
           exercise: {
               name: exName,
               durationMinutes: parseInt(exDuration),
-              caloriesBurned: calories,
+              caloriesBurned: calories || 0, // Ensure no NaN
               intensity: exIntensity
           }
       };

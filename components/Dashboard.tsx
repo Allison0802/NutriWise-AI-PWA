@@ -22,13 +22,13 @@ import React, { useMemo } from 'react';
         const totals = todayLogs.reduce((acc, log) => {
             if (log.type === 'food' && log.items) {
               log.items.forEach(item => {
-                acc.calories += item.calories;
-                acc.protein += item.protein;
-                acc.carbs += item.carbs;
-                acc.fat += item.fat;
+                acc.calories += (item.calories || 0);
+                acc.protein += (item.protein || 0);
+                acc.carbs += (item.carbs || 0);
+                acc.fat += (item.fat || 0);
               });
             } else if (log.type === 'exercise' && log.exercise) {
-                acc.burned += log.exercise.caloriesBurned;
+                acc.burned += (log.exercise.caloriesBurned || 0);
             }
             return acc;
           }, { calories: 0, protein: 0, carbs: 0, fat: 0, burned: 0 });
@@ -53,7 +53,7 @@ import React, { useMemo } from 'react';
           const dailyLogs = logs.filter(log => isSameDay(new Date(log.timestamp), date));
           const calories = dailyLogs.reduce((sum, log) => {
             if (log.type === 'food' && log.items) {
-              return sum + log.items.reduce((s, item) => s + item.calories, 0);
+              return sum + log.items.reduce((s, item) => s + (item.calories || 0), 0);
             }
             return sum;
           }, 0);
@@ -232,7 +232,7 @@ import React, { useMemo } from 'react';
                             {log.type === 'food' && log.items?.map((item, idx) => (
                                 <div key={idx} className="text-sm text-slate-600 mt-1 flex justify-between">
                                     <span>{item.name} ({item.quantity} {item.unit})</span>
-                                    <span className="font-medium">{Math.round(item.calories)} kcal</span>
+                                    <span className="font-medium">{Math.round(item.calories || 0)} kcal</span>
                                 </div>
                             ))}
                              {log.type === 'exercise' && log.exercise && (

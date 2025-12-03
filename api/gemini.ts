@@ -1,16 +1,23 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Helper to strip Markdown code blocks from JSON responses
+// Helper to robustly extract JSON from AI text response
 function cleanJSON(text: string | undefined): string {
   if (!text) return "{}";
   let cleaned = text.trim();
-  // Remove ```json ... ``` or just ``` ... ``` wrappers
-  if (cleaned.startsWith("```json")) {
-    cleaned = cleaned.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-  } else if (cleaned.startsWith("```")) {
-    cleaned = cleaned.replace(/^```\s*/, "").replace(/\s*```$/, "");
+  
+  // 1. Try to extract JSON from code blocks first
+  const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (codeBlockMatch) {
+      cleaned = codeBlockMatch[1];
+  } else {
+      // 2. If no code block, try to find the first '{' and last '}'
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+          cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+      }
   }
+  
   return cleaned;
 }
 
