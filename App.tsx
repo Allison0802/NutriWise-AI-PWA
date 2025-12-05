@@ -7,6 +7,7 @@ import ChatInterface from './components/ChatInterface';
 import HistoryView from './components/HistoryView';
 import { getPersonalizedAdvice, chatWithNutritionist, getInstantFeedback } from './services/geminiService';
 import { Home, PlusCircle, MessageCircle, User, Activity, CheckCircle, X, Loader2, Download, Upload } from 'lucide-react';
+import { isSameDay } from 'date-fns';
 
 // Default initial state
 const INITIAL_PROFILE: UserProfile = {
@@ -43,6 +44,7 @@ const App: React.FC = () => {
 
   const [view, setView] = useState<ViewState>('dashboard');
   const [advice, setAdvice] = useState<string | null>(null);
+  const [isAdviceLoading, setIsAdviceLoading] = useState(false);
   const [editingLog, setEditingLog] = useState<LogEntry | null>(null);
   const [isChatLoading, setIsChatLoading] = useState(false);
 
@@ -65,17 +67,21 @@ const App: React.FC = () => {
     localStorage.setItem('nutriwise_chat', JSON.stringify(chatHistory));
   }, [chatHistory]);
 
-  // Generate advice periodically (e.g., on mount if we have logs)
-  useEffect(() => {
-    const fetchAdvice = async () => {
-      if (logs.length > 0 && !advice) {
+  // REMOVED: Automatic advice generation useEffect to save tokens.
+  // Advice is now triggered manually via handleGenerateAdvice.
+
+  const handleGenerateAdvice = async () => {
+      if (logs.length === 0) return;
+      setIsAdviceLoading(true);
+      try {
         const result = await getPersonalizedAdvice(logs, profile);
         setAdvice(result);
+      } catch (e) {
+        setAdvice("Could not generate advice. Try again later.");
+      } finally {
+        setIsAdviceLoading(false);
       }
-    };
-    fetchAdvice();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logs.length]);
+  };
 
   const handleSaveEntry = async (entry: LogEntry) => {
     if (editingLog) {
@@ -119,15 +125,21 @@ const App: React.FC = () => {
       setChatHistory(prev => [...prev, userMsg]);
       setIsChatLoading(true);
 
-      // Pass the last 100 logs to provide historical context
-      const recentLogs = logs.sort((a, b) => b.timestamp - a.timestamp).slice(0, 100);
+      // OPTIMIZATION: Only send today's logs + last 5 entries to reduce Token usage significantly
+      const today = new Date();
+      const recentLogs = logs
+        .filter(l => isSameDay(new Date(l.timestamp), today))
+        .sort((a, b) => b.timestamp - a.timestamp);
+      
+      // Add a fallback if today is empty, just take last 5
+      const contextLogs = recentLogs.length > 0 ? recentLogs : logs.slice(0, 5);
 
       const historyContext = chatHistory.map(m => ({
           role: m.role,
           parts: [{ text: m.text }]
       }));
 
-      const responseText = await chatWithNutritionist(historyContext, text, { profile, logs: recentLogs });
+      const responseText = await chatWithNutritionist(historyContext, text, { profile, logs: contextLogs });
 
       const modelMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'model', text: responseText, timestamp: Date.now() };
       setChatHistory(prev => [...prev, modelMsg]);
@@ -223,18 +235,41 @@ const App: React.FC = () => {
         {view === 'dashboard' && (
           <div className="h-full overflow-y-auto no-scrollbar">
              <div className="p-4">
-                {advice && (
-                  <div className="mb-6 bg-gradient-to-r from-emerald-600 to-emerald-800 rounded-2xl p-4 text-white shadow-lg">
-                    <h3 className="flex items-center gap-2 font-bold mb-2 text-sm uppercase tracking-wide opacity-90">
+                <div className="mb-6 bg-gradient-to-r from-emerald-600 to-emerald-800 rounded-2xl p-4 text-white shadow-lg relative overflow-hidden">
+                    <h3 className="flex items-center gap-2 font-bold mb-2 text-sm uppercase tracking-wide opacity-90 relative z-10">
                       <Activity size={16} /> Daily Insight
                     </h3>
-                    <div className="text-sm leading-relaxed opacity-95">
-                        {advice.split('\n').map((line, i) => (
-                            <p key={i} className="mb-1">{line}</p>
-                        ))}
-                    </div>
-                  </div>
-                )}
+                    
+                    {advice ? (
+                         <div className="text-sm leading-relaxed opacity-95 relative z-10">
+                            {advice.split('\n').map((line, i) => (
+                                <p key={i} className="mb-1">{line}</p>
+                            ))}
+                            <button 
+                                onClick={handleGenerateAdvice}
+                                className="mt-3 text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                            >
+                                <RefreshCw className="w-3 h-3" /> Refresh
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="relative z-10">
+                            <p className="text-sm opacity-90 mb-3">Generate personalized advice based on your recent activity.</p>
+                            <button 
+                                onClick={handleGenerateAdvice}
+                                disabled={isAdviceLoading}
+                                className="bg-white text-emerald-800 px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-emerald-50 transition-colors flex items-center gap-2"
+                            >
+                                {isAdviceLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Activity size={16}/>}
+                                {isAdviceLoading ? 'Analyzing...' : 'Generate Insight'}
+                            </button>
+                        </div>
+                    )}
+                    
+                    {/* Background Pattern */}
+                    <Activity className="absolute -bottom-4 -right-4 w-32 h-32 text-white/10" />
+                </div>
+
                 <Dashboard 
                     logs={logs} 
                     profile={profile} 
@@ -385,3 +420,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+import { RefreshCw } from 'lucide-react'; // Add missing import

@@ -81,8 +81,9 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
-          const MAX_WIDTH = 1024;
-          const MAX_HEIGHT = 1024;
+          // OPTIMIZATION: Reduced max dimensions from 1024 to 800 to save tokens
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
 
           if (width > height) {
             if (width > MAX_WIDTH) {
