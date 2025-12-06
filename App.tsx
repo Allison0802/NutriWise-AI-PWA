@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { UserProfile, LogEntry, ViewState, ChatMessage } from './types';
 import Dashboard from './components/Dashboard';
@@ -97,7 +96,8 @@ const App: React.FC = () => {
            const message = await getInstantFeedback(entry, profile);
            setFeedbackModal({ isOpen: true, isLoading: false, message });
       } catch (e) {
-           setFeedbackModal({ isOpen: false, isLoading: false, message: null });
+           // Silent failover: If quota exceeded or error, just show generic success message
+           setFeedbackModal({ isOpen: true, isLoading: false, message: "Entry saved successfully!" });
       }
     }
   };
@@ -420,4 +420,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-import { RefreshCw } from 'lucide-react'; // Add missing import

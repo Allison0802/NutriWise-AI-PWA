@@ -101,8 +101,9 @@ export default async function handler(req: any, res: any) {
     }
 
     const { action, payload } = req.body;
+    const MODEL_NAME = "gemini-1.5-flash"; // Stable model
 
-    console.log(`Processing action: ${action}`);
+    console.log(`Processing action: ${action} with model ${MODEL_NAME}`);
 
     if (!action) {
          return res.status(400).json({ error: "Missing action in request body" });
@@ -128,7 +129,7 @@ export default async function handler(req: any, res: any) {
       parts.push({ text: prompt });
 
       const response = await genAI.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: MODEL_NAME,
         contents: { parts },
         config: {
           responseMimeType: "application/json",
@@ -156,7 +157,7 @@ export default async function handler(req: any, res: any) {
             Return the FULL updated list of items.
         `;
       const response = await genAI.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: MODEL_NAME,
         contents: { parts: [{ text: prompt }] },
         config: {
           responseMimeType: "application/json",
@@ -170,7 +171,7 @@ export default async function handler(req: any, res: any) {
     if (action === 'estimateExerciseCalories') {
       const { name, duration, intensity, profile } = payload;
       const response = await genAI.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: MODEL_NAME,
         contents: `
           Estimate the calories burned for this activity/exercise.
           Activity Name: "${name}"
@@ -212,7 +213,7 @@ export default async function handler(req: any, res: any) {
       const { logs, profile } = payload;
       const recentLogs = logs.slice(0, 20);
       const response = await genAI.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: MODEL_NAME,
         contents: `
           Analyze these user logs and profile to find trends and offer body recomposition advice.
           Profile: ${JSON.stringify(profile)}
@@ -231,7 +232,7 @@ export default async function handler(req: any, res: any) {
     if (action === 'getInstantFeedback') {
       const { entry, profile } = payload;
       const response = await genAI.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: MODEL_NAME,
         contents: `
           Generate a single, short (max 15 words), encouraging or witty comment for this user's new log entry.
           Entry: ${JSON.stringify(entry)}
@@ -249,7 +250,7 @@ export default async function handler(req: any, res: any) {
     if (action === 'chatWithNutritionist') {
       const { history, message, context } = payload;
       const chat = genAI.chats.create({
-        model: "gemini-2.5-flash",
+        model: MODEL_NAME,
         config: {
           systemInstruction: `
             You are a supportive, evidence-based nutritionist assistant.
@@ -274,7 +275,12 @@ export default async function handler(req: any, res: any) {
 
   } catch (error: any) {
     console.error("API Error details:", error);
-    // Return the actual error message so the client knows if it's an API Key issue
-    res.status(500).json({ error: error.message || "Internal Server Error" });
+    // Return the specific status code from Gemini if available, otherwise 500
+    // If the error message mentions 429 or quota, force 429 status
+    let status = error.status || error.response?.status || 500;
+    if (error.message && (error.message.includes("429") || error.message.includes("Quota"))) {
+        status = 429;
+    }
+    res.status(status).json({ error: error.message || "Internal Server Error" });
   }
 }

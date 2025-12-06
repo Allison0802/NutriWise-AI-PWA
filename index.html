@@ -8,21 +8,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="/manifest.json" />
     <title>NutriWise AI</title>
-  <script type="importmap">
-{
-  "imports": {
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "date-fns": "https://aistudiocdn.com/date-fns@^4.1.0",
-    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "vite": "https://aistudiocdn.com/vite@^7.2.4",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0"
-  }
-}
-</script>
 </head>
   <body class="bg-slate-50 text-slate-900 font-sans antialiased selection:bg-emerald-200">
     <div id="root"></div>
@@ -30,7 +15,8 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').then(registration => {
+          // Add version param to force update
+          navigator.serviceWorker.register('/sw.js?v=5').then(registration => {
             console.log('SW registered');
           }).catch(err => {
             console.log('SW failed', err);
