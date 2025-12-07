@@ -62,6 +62,14 @@ const refinementSchema: any = {
   required: ["updatedItems", "assistantResponse"]
 };
 
+// List of models to try in order of preference if one is not found (404)
+const CANDIDATE_MODELS = [
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-002",
+    "gemini-1.5-flash-001",
+    "gemini-1.5-pro"
+];
+
 export default async function handler(req: any, res: any) {
   // Set CORS headers for Vercel
   res.setHeader('Access-Control-Allow-Credentials', true);
@@ -102,15 +110,37 @@ export default async function handler(req: any, res: any) {
     }
 
     const { action, payload } = req.body;
-    
-    // Use the stable 1.5 Flash model
-    const MODEL_NAME = "gemini-1.5-flash";
-
-    console.log(`Processing action: ${action}`);
 
     if (!action) {
          return res.status(400).json({ error: "Missing action in request body" });
     }
+    
+    console.log(`Processing action: ${action}`);
+
+    // Helper to execute generation with model fallback
+    const executeWithFallback = async (operation: (model: string) => Promise<any>) => {
+        let lastError: any = null;
+        for (const model of CANDIDATE_MODELS) {
+            try {
+                // console.log(`Trying model: ${model}`);
+                return await operation(model);
+            } catch (error: any) {
+                // Check if error is 404 (Not Found) or similar model unavailability
+                const isModelError = error.status === 404 || 
+                                     (error.message && error.message.includes("not found")) ||
+                                     (error.message && error.message.includes("not supported"));
+                
+                if (isModelError) {
+                    console.warn(`Model ${model} failed (Not Found). Retrying with next candidate...`);
+                    lastError = error;
+                    continue;
+                }
+                // If it's a rate limit (429) or other error, throw immediately (handled by frontend retry)
+                throw error;
+            }
+        }
+        throw lastError || new Error("All candidate models failed.");
+    };
 
     if (action === 'analyzeImageOrText') {
       const { textInput, imageBase64 } = payload;
@@ -131,14 +161,16 @@ export default async function handler(req: any, res: any) {
       `;
       parts.push({ text: prompt });
 
-      const response = await genAI.models.generateContent({
-        model: MODEL_NAME,
-        contents: { parts },
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: foodAnalysisSchema,
-          systemInstruction: "You are a specialized nutritionist AI. Your estimates should be evidence-based. If an image is blurry or ambiguous, mark confidence as low.",
-        },
+      const response = await executeWithFallback(async (model) => {
+          return await genAI.models.generateContent({
+            model: model,
+            contents: { parts },
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: foodAnalysisSchema,
+              systemInstruction: "You are a specialized nutritionist AI. Your estimates should be evidence-based. If an image is blurry or ambiguous, mark confidence as low.",
+            },
+          });
       });
       
       const jsonStr = cleanJSON(response.text);
@@ -159,55 +191,63 @@ export default async function handler(req: any, res: any) {
 
             Return the FULL updated list of items.
         `;
-      const response = await genAI.models.generateContent({
-        model: MODEL_NAME,
-        contents: { parts: [{ text: prompt }] },
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: refinementSchema,
-        }
+      
+      const response = await executeWithFallback(async (model) => {
+          return await genAI.models.generateContent({
+            model: model,
+            contents: { parts: [{ text: prompt }] },
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: refinementSchema,
+            }
+          });
       });
+
       const jsonStr = cleanJSON(response.text);
       return res.status(200).json(JSON.parse(jsonStr));
     }
 
     if (action === 'estimateExerciseCalories') {
       const { name, duration, intensity, profile } = payload;
-      const response = await genAI.models.generateContent({
-        model: MODEL_NAME,
-        contents: `
-          Estimate the calories burned for this activity/exercise.
-          Activity Name: "${name}"
-          Duration: ${duration} minutes
-          Intensity: ${intensity}
-          
-          User Physiology:
-          - Age: ${profile.age}
-          - Gender: ${profile.gender}
-          - Weight: ${profile.weightKg}kg
-          - Height: ${profile.heightCm}cm
+      
+      const response = await executeWithFallback(async (model) => {
+          return await genAI.models.generateContent({
+            model: model,
+            contents: `
+              Estimate the calories burned for this activity/exercise.
+              Activity Name: "${name}"
+              Duration: ${duration} minutes
+              Intensity: ${intensity}
+              
+              User Physiology:
+              - Age: ${profile.age}
+              - Gender: ${profile.gender}
+              - Weight: ${profile.weightKg}kg
+              - Height: ${profile.heightCm}cm
 
-          Instructions:
-          1. Identify the likely activity. If "${name}" is not a recognized exercise (e.g. "table", "chair", "nothing"), treat it as sedentary.
-          2. Calculate calories based on MET values. 
-          3. If input is non-exercise, provide low estimate and set 'note' to explain.
-          4. Adjust for user stats.
-          
-          Output Requirements:
-          - calories: Numeric value.
-          - note: Short string explanation.
-        `,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-               calories: { type: Type.NUMBER },
-               note: { type: Type.STRING }
+              Instructions:
+              1. Identify the likely activity. If "${name}" is not a recognized exercise (e.g. "table", "chair", "nothing"), treat it as sedentary.
+              2. Calculate calories based on MET values. 
+              3. If input is non-exercise, provide low estimate and set 'note' to explain.
+              4. Adjust for user stats.
+              
+              Output Requirements:
+              - calories: Numeric value.
+              - note: Short string explanation.
+            `,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                   calories: { type: Type.NUMBER },
+                   note: { type: Type.STRING }
+                }
+              }
             }
-          }
-        }
+          });
       });
+
       const jsonStr = cleanJSON(response.text);
       return res.status(200).json(JSON.parse(jsonStr));
     }
@@ -215,63 +255,75 @@ export default async function handler(req: any, res: any) {
     if (action === 'getPersonalizedAdvice') {
       const { logs, profile } = payload;
       const recentLogs = logs.slice(0, 20);
-      const response = await genAI.models.generateContent({
-        model: MODEL_NAME,
-        contents: `
-          Analyze these user logs and profile to find trends and offer body recomposition advice.
-          Profile: ${JSON.stringify(profile)}
-          Recent Logs: ${JSON.stringify(recentLogs)}
-          
-          Instructions:
-          1. Base advice on stats: Age ${profile.age}, Gender ${profile.gender}, Weight ${profile.weightKg}kg.
-          2. EXPLICITLY consider gender-related physiological factors.
-          
-          Provide a VERY CONCISE summary (max 2 short sentences).
-        `,
+      
+      const response = await executeWithFallback(async (model) => {
+          return await genAI.models.generateContent({
+            model: model,
+            contents: `
+              Analyze these user logs and profile to find trends and offer body recomposition advice.
+              Profile: ${JSON.stringify(profile)}
+              Recent Logs: ${JSON.stringify(recentLogs)}
+              
+              Instructions:
+              1. Base advice on stats: Age ${profile.age}, Gender ${profile.gender}, Weight ${profile.weightKg}kg.
+              2. EXPLICITLY consider gender-related physiological factors.
+              
+              Provide a VERY CONCISE summary (max 2 short sentences).
+            `,
+          });
       });
+
       return res.status(200).json({ text: response.text || "No advice available." });
     }
 
     if (action === 'getInstantFeedback') {
       const { entry, profile } = payload;
-      const response = await genAI.models.generateContent({
-        model: MODEL_NAME,
-        contents: `
-          Generate a single, short (max 15 words), encouraging or witty comment for this user's new log entry.
-          Entry: ${JSON.stringify(entry)}
-          User Profile: ${JSON.stringify(profile)}
-          
-          If it's food, comment on nutrients or choice.
-          If it's exercise, comment on effort or burn.
-          If it's a note, be empathetic or responsive to the user's sentiment.
-          Do NOT repeat the food name literally if possible, be natural.
-        `,
+      
+      const response = await executeWithFallback(async (model) => {
+          return await genAI.models.generateContent({
+            model: model,
+            contents: `
+              Generate a single, short (max 15 words), encouraging or witty comment for this user's new log entry.
+              Entry: ${JSON.stringify(entry)}
+              User Profile: ${JSON.stringify(profile)}
+              
+              If it's food, comment on nutrients or choice.
+              If it's exercise, comment on effort or burn.
+              If it's a note, be empathetic or responsive to the user's sentiment.
+              Do NOT repeat the food name literally if possible, be natural.
+            `,
+          });
       });
+
       return res.status(200).json({ text: response.text });
     }
 
     if (action === 'chatWithNutritionist') {
       const { history, message, context } = payload;
-      // Chat is stateful.
-      const chat = genAI.chats.create({
-        model: MODEL_NAME,
-        config: {
-          systemInstruction: `
-            You are a supportive, evidence-based nutritionist assistant.
-            Current User Context:
-            Profile: ${JSON.stringify(context.profile)}
-            Recent Logs (History): ${JSON.stringify(context.logs)}
-            
-            Answer questions about nutrition, exercise, and the user's data. 
-            Be encouraging but scientifically rigorous. 
-            Keep responses concise.
-            Consider age, gender, and hormonal factors.
-          `,
-        },
-        history: history,
+      // Chat is stateful. We have to pick a model and try to create chat. 
+      // Fallback is harder here because 'chats.create' returns an object, we need to send message to check if it works.
+      
+      const result = await executeWithFallback(async (model) => {
+          const chat = genAI.chats.create({
+            model: model,
+            config: {
+              systemInstruction: `
+                You are a supportive, evidence-based nutritionist assistant.
+                Current User Context:
+                Profile: ${JSON.stringify(context.profile)}
+                Recent Logs (History): ${JSON.stringify(context.logs)}
+                
+                Answer questions about nutrition, exercise, and the user's data. 
+                Be encouraging but scientifically rigorous. 
+                Keep responses concise.
+                Consider age, gender, and hormonal factors.
+              `,
+            },
+            history: history,
+          });
+          return await chat.sendMessage({ message });
       });
 
-      const result = await chat.sendMessage({ message });
       return res.status(200).json({ text: result.text });
     }
 
