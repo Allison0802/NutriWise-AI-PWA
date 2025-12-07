@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nutriwise-cache-v6';
+const CACHE_NAME = 'nutriwise-cache-v7';
 const urlsToCache = [
   '/',
   '/index.html',

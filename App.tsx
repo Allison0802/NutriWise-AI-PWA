@@ -373,6 +373,7 @@ const App: React.FC = () => {
                           </label>
                       </div>
                       <p className="text-xs text-slate-400 mt-2 text-center">Use this to move your data to the production URL.</p>
+                      <p className="text-[10px] text-slate-300 mt-4 text-center">App Version v1.2.0</p>
                  </div>
              </div>
           </div>

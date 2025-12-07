@@ -136,8 +136,13 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
       if (result.clarification) {
         setClarification(result.clarification);
       }
-    } catch (error) {
-      alert("Analysis failed. Please try again.");
+    } catch (error: any) {
+      const msg = error.message || "";
+      if (msg.includes("429") || msg.includes("busy")) {
+         alert("Server is currently busy (High Traffic). Please wait 30 seconds and try again.");
+      } else {
+         alert(`Analysis failed: ${msg}. Please try again.`);
+      }
     } finally {
       setIsAnalyzing(false);
     }
