@@ -101,7 +101,7 @@ export default async function handler(req: any, res: any) {
     }
 
     const { action, payload } = req.body;
-    const MODEL_NAME = "gemini-1.5-flash"; // Stable model
+    const MODEL_NAME = "gemini-2.5-flash"; // Updated to current stable model
 
     console.log(`Processing action: ${action} with model ${MODEL_NAME}`);
 
