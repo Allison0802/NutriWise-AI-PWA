@@ -62,17 +62,6 @@ const refinementSchema: any = {
   required: ["updatedItems", "assistantResponse"]
 };
 
-// Helper: Attempt generation with fallback models
-async function generateWithFallback(genAI: GoogleGenAI, primaryModel: string, fallbackModel: string, params: any) {
-    try {
-        console.log(`Attempting with primary model: ${primaryModel}`);
-        return await genAI.models.generateContent({ ...params, model: primaryModel });
-    } catch (error: any) {
-        console.warn(`Primary model failed (${error.status || error.message}). Switching to fallback: ${fallbackModel}`);
-        return await genAI.models.generateContent({ ...params, model: fallbackModel });
-    }
-}
-
 export default async function handler(req: any, res: any) {
   // Set CORS headers for Vercel
   res.setHeader('Access-Control-Allow-Credentials', true);
@@ -114,10 +103,8 @@ export default async function handler(req: any, res: any) {
 
     const { action, payload } = req.body;
     
-    // Switch back to 1.5-flash as it is the most stable/generous with quotas
-    // Fallback to 1.5-flash-8b which is smaller, faster, and less likely to hit complexity limits
-    const PRIMARY_MODEL = "gemini-1.5-flash";
-    const FALLBACK_MODEL = "gemini-1.5-flash-8b";
+    // Use the stable 1.5 Flash model
+    const MODEL_NAME = "gemini-1.5-flash";
 
     console.log(`Processing action: ${action}`);
 
@@ -144,7 +131,8 @@ export default async function handler(req: any, res: any) {
       `;
       parts.push({ text: prompt });
 
-      const response = await generateWithFallback(genAI, PRIMARY_MODEL, FALLBACK_MODEL, {
+      const response = await genAI.models.generateContent({
+        model: MODEL_NAME,
         contents: { parts },
         config: {
           responseMimeType: "application/json",
@@ -171,7 +159,8 @@ export default async function handler(req: any, res: any) {
 
             Return the FULL updated list of items.
         `;
-      const response = await generateWithFallback(genAI, PRIMARY_MODEL, FALLBACK_MODEL, {
+      const response = await genAI.models.generateContent({
+        model: MODEL_NAME,
         contents: { parts: [{ text: prompt }] },
         config: {
           responseMimeType: "application/json",
@@ -184,7 +173,8 @@ export default async function handler(req: any, res: any) {
 
     if (action === 'estimateExerciseCalories') {
       const { name, duration, intensity, profile } = payload;
-      const response = await generateWithFallback(genAI, PRIMARY_MODEL, FALLBACK_MODEL, {
+      const response = await genAI.models.generateContent({
+        model: MODEL_NAME,
         contents: `
           Estimate the calories burned for this activity/exercise.
           Activity Name: "${name}"
@@ -225,7 +215,8 @@ export default async function handler(req: any, res: any) {
     if (action === 'getPersonalizedAdvice') {
       const { logs, profile } = payload;
       const recentLogs = logs.slice(0, 20);
-      const response = await generateWithFallback(genAI, PRIMARY_MODEL, FALLBACK_MODEL, {
+      const response = await genAI.models.generateContent({
+        model: MODEL_NAME,
         contents: `
           Analyze these user logs and profile to find trends and offer body recomposition advice.
           Profile: ${JSON.stringify(profile)}
@@ -243,7 +234,8 @@ export default async function handler(req: any, res: any) {
 
     if (action === 'getInstantFeedback') {
       const { entry, profile } = payload;
-      const response = await generateWithFallback(genAI, PRIMARY_MODEL, FALLBACK_MODEL, {
+      const response = await genAI.models.generateContent({
+        model: MODEL_NAME,
         contents: `
           Generate a single, short (max 15 words), encouraging or witty comment for this user's new log entry.
           Entry: ${JSON.stringify(entry)}
@@ -260,37 +252,24 @@ export default async function handler(req: any, res: any) {
 
     if (action === 'chatWithNutritionist') {
       const { history, message, context } = payload;
-      // Chat is stateful, so we can't easily fallback mid-session without recreating the chat object.
-      // We will try to create the chat with primary, if it fails immediately, try fallback.
-      let chat;
-      try {
-           chat = genAI.chats.create({
-            model: PRIMARY_MODEL,
-            config: {
-              systemInstruction: `
-                You are a supportive, evidence-based nutritionist assistant.
-                Current User Context:
-                Profile: ${JSON.stringify(context.profile)}
-                Recent Logs (History): ${JSON.stringify(context.logs)}
-                
-                Answer questions about nutrition, exercise, and the user's data. 
-                Be encouraging but scientifically rigorous. 
-                Keep responses concise.
-                Consider age, gender, and hormonal factors.
-              `,
-            },
-            history: history,
-          });
-      } catch (e) {
-          // Fallback init
-          chat = genAI.chats.create({
-            model: FALLBACK_MODEL,
-            config: {
-               systemInstruction: `You are a helpful nutritionist assistant. Profile: ${JSON.stringify(context.profile)}`,
-            },
-            history: history
-          });
-      }
+      // Chat is stateful.
+      const chat = genAI.chats.create({
+        model: MODEL_NAME,
+        config: {
+          systemInstruction: `
+            You are a supportive, evidence-based nutritionist assistant.
+            Current User Context:
+            Profile: ${JSON.stringify(context.profile)}
+            Recent Logs (History): ${JSON.stringify(context.logs)}
+            
+            Answer questions about nutrition, exercise, and the user's data. 
+            Be encouraging but scientifically rigorous. 
+            Keep responses concise.
+            Consider age, gender, and hormonal factors.
+          `,
+        },
+        history: history,
+      });
 
       const result = await chat.sendMessage({ message });
       return res.status(200).json({ text: result.text });
