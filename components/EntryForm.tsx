@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { FoodItem, LogEntry, ExerciseItem, UserProfile, ChatMessage } from '../types';
 import { analyzeImageOrText, refineAnalyzedLogs, estimateExerciseCalories } from '../services/geminiService';
-import { Camera, Image as ImageIcon, Loader2, Plus, X, Check, Mic, Calculator, MessageSquare, Send, Zap, Flame, ChevronRight } from 'lucide-react';
+import { Camera, Image as ImageIcon, Loader2, Plus, X, Check, Mic, Calculator, MessageSquare, Send, Zap, Flame, ChevronRight, PenTool } from 'lucide-react';
 
 const STARTER_MESSAGE = 'Hi! I can help you analyze your nutrition logs, suggest meals, or answer health questions. What can I do for you?';
 
@@ -148,6 +148,23 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
     }
   };
 
+  const startManualEntry = () => {
+      setAnalyzedItems([{
+          name: '',
+          quantity: 1,
+          unit: 'serving',
+          calories: 0,
+          protein: 0,
+          carbs: 0,
+          fat: 0,
+          baseCalories: 0,
+          baseProtein: 0,
+          baseCarbs: 0,
+          baseFat: 0,
+          confidence: 'high'
+      }]);
+  };
+
   const handleRefine = async () => {
       if (!assistantInput.trim() || !analyzedItems) return;
       setIsRefining(true);
@@ -262,6 +279,7 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
       const item = newItems[index];
       
       item.quantity = newQty;
+      // Recalculate based on Base Values
       item.calories = Math.round(item.baseCalories * newQty);
       item.protein = Math.round(item.baseProtein * newQty * 10) / 10;
       item.carbs = Math.round(item.baseCarbs * newQty * 10) / 10;
@@ -276,6 +294,24 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
     newItems[index] = { ...newItems[index], [field]: value };
     setAnalyzedItems(newItems);
   };
+
+  // Logic to handle MANUAL macro edits (reverse engineering the base values)
+  const updateItemMacro = (index: number, field: 'calories' | 'protein' | 'carbs' | 'fat', value: number) => {
+      if (!analyzedItems) return;
+      const newItems = [...analyzedItems];
+      const item = newItems[index];
+
+      // Update the display value
+      item[field] = value;
+      
+      // Update the base value (so future quantity changes scale correctly)
+      const qty = item.quantity || 1;
+      const baseField = `base${field.charAt(0).toUpperCase() + field.slice(1)}` as keyof FoodItem;
+      // @ts-ignore - dynamic key assignment matches type logic
+      item[baseField] = value / qty;
+
+      setAnalyzedItems(newItems);
+  }
 
   const removeImage = () => {
     setSelectedImage(null);
@@ -355,6 +391,19 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
                     {isAnalyzing ? <Loader2 className="animate-spin" /> : <Plus />}
                     {isAnalyzing ? 'Analyzing with AI...' : 'Analyze Food'}
                   </button>
+                  
+                  <div className="relative flex py-2 items-center">
+                      <div className="flex-grow border-t border-slate-200"></div>
+                      <span className="flex-shrink-0 mx-4 text-slate-400 text-xs uppercase">OR</span>
+                      <div className="flex-grow border-t border-slate-200"></div>
+                  </div>
+
+                  <button
+                    onClick={startManualEntry}
+                    className="w-full bg-white text-slate-600 border border-slate-300 py-3 rounded-xl font-medium hover:bg-slate-50 flex items-center justify-center gap-2"
+                  >
+                    <PenTool size={18} /> Enter Manually
+                  </button>
                 </div>
               </>
             ) : (
@@ -400,8 +449,9 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
                     <div className="flex justify-between items-start">
                         <input 
                             value={item.name} 
+                            placeholder="Food Item Name"
                             onChange={(e) => updateItemField(idx, 'name', e.target.value)}
-                            className="font-bold text-slate-800 border-b border-transparent focus:border-slate-300 focus:outline-none bg-transparent"
+                            className="font-bold text-slate-800 border-b border-transparent focus:border-slate-300 focus:outline-none bg-transparent w-full"
                         />
                         <button onClick={() => {
                             const newItems = analyzedItems.filter((_, i) => i !== idx);
@@ -432,7 +482,12 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
                         </div>
                         
                         <div className="p-2 text-right">
-                             <div className="text-2xl font-bold text-emerald-600">{Math.round(item.calories)}</div>
+                             <input 
+                                type="number"
+                                value={Math.round(item.calories)}
+                                onChange={(e) => updateItemMacro(idx, 'calories', parseFloat(e.target.value) || 0)}
+                                className="text-2xl font-bold text-emerald-600 w-full text-right bg-transparent border-none p-0 focus:ring-0"
+                             />
                              <div className="text-xs text-slate-400">calories</div>
                         </div>
                     </div>
@@ -440,15 +495,39 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
                     <div className="grid grid-cols-3 gap-2 mt-2">
                         <div className="bg-blue-50 p-2 rounded-lg text-center">
                             <span className="block text-xs text-blue-400 font-bold uppercase">Prot</span>
-                            <span className="font-semibold text-slate-700">{item.protein}g</span>
+                            <div className="flex items-baseline justify-center">
+                                <input 
+                                    type="number"
+                                    value={item.protein}
+                                    onChange={(e) => updateItemMacro(idx, 'protein', parseFloat(e.target.value) || 0)}
+                                    className="font-semibold text-slate-700 bg-transparent text-center w-full border-none p-0 focus:ring-0"
+                                />
+                                <span className="text-xs text-slate-500">g</span>
+                            </div>
                         </div>
                         <div className="bg-yellow-50 p-2 rounded-lg text-center">
                             <span className="block text-xs text-yellow-500 font-bold uppercase">Carb</span>
-                            <span className="font-semibold text-slate-700">{item.carbs}g</span>
+                            <div className="flex items-baseline justify-center">
+                                <input 
+                                    type="number"
+                                    value={item.carbs}
+                                    onChange={(e) => updateItemMacro(idx, 'carbs', parseFloat(e.target.value) || 0)}
+                                    className="font-semibold text-slate-700 bg-transparent text-center w-full border-none p-0 focus:ring-0"
+                                />
+                                <span className="text-xs text-slate-500">g</span>
+                            </div>
                         </div>
                         <div className="bg-red-50 p-2 rounded-lg text-center">
                             <span className="block text-xs text-red-400 font-bold uppercase">Fat</span>
-                            <span className="font-semibold text-slate-700">{item.fat}g</span>
+                             <div className="flex items-baseline justify-center">
+                                <input 
+                                    type="number"
+                                    value={item.fat}
+                                    onChange={(e) => updateItemMacro(idx, 'fat', parseFloat(e.target.value) || 0)}
+                                    className="font-semibold text-slate-700 bg-transparent text-center w-full border-none p-0 focus:ring-0"
+                                />
+                                <span className="text-xs text-slate-500">g</span>
+                            </div>
                         </div>
                     </div>
                     {item.notes && <p className="text-xs text-slate-400 italic mt-2">{item.notes}</p>}
@@ -456,10 +535,10 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
                 ))}
                 
                  <button
-                    onClick={() => setAnalyzedItems([...analyzedItems, { name: 'New Item', quantity: 1, unit: 'serving', baseCalories: 100, baseProtein: 5, baseCarbs: 10, baseFat: 5, calories: 100, protein: 5, carbs: 10, fat: 5, confidence: 'high' }])}
+                    onClick={() => setAnalyzedItems([...analyzedItems, { name: '', quantity: 1, unit: 'serving', baseCalories: 0, baseProtein: 0, baseCarbs: 0, baseFat: 0, calories: 0, protein: 0, carbs: 0, fat: 0, confidence: 'high' }])}
                     className="w-full py-3 border border-dashed border-slate-300 text-slate-500 rounded-xl hover:bg-slate-50"
                   >
-                    + Add Manual Item
+                    + Add Another Item
                   </button>
 
                 <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 z-10">
