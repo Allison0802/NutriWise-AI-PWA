@@ -385,7 +385,7 @@ const App: React.FC = () => {
               </div>
               
               <div className="pt-8 text-center">
-                  <p className="text-xs text-slate-400">NutriWise AI v1.2.3</p>
+                  <p className="text-xs text-slate-400">NutriWise AI v1.2.4</p>
               </div>
             </div>
           </div>

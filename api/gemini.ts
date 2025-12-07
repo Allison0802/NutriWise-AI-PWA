@@ -68,11 +68,8 @@ async function generateWithFallback(genAI: GoogleGenAI, primaryModel: string, fa
         console.log(`Attempting with primary model: ${primaryModel}`);
         return await genAI.models.generateContent({ ...params, model: primaryModel });
     } catch (error: any) {
-        if (error.status === 404 || error.status === 429 || error.message?.includes("not found") || error.message?.includes("quota")) {
-             console.warn(`Primary model failed (${error.status || 'Error'}). Switching to fallback: ${fallbackModel}`);
-             return await genAI.models.generateContent({ ...params, model: fallbackModel });
-        }
-        throw error;
+        console.warn(`Primary model failed (${error.status || error.message}). Switching to fallback: ${fallbackModel}`);
+        return await genAI.models.generateContent({ ...params, model: fallbackModel });
     }
 }
 
@@ -117,9 +114,10 @@ export default async function handler(req: any, res: any) {
 
     const { action, payload } = req.body;
     
-    // Strategy: Try the robust 2.5 flash, fallback to the generic 'latest' alias which is usually highly available
-    const PRIMARY_MODEL = "gemini-2.5-flash";
-    const FALLBACK_MODEL = "gemini-flash-latest";
+    // Switch back to 1.5-flash as it is the most stable/generous with quotas
+    // Fallback to 1.5-flash-8b which is smaller, faster, and less likely to hit complexity limits
+    const PRIMARY_MODEL = "gemini-1.5-flash";
+    const FALLBACK_MODEL = "gemini-1.5-flash-8b";
 
     console.log(`Processing action: ${action}`);
 

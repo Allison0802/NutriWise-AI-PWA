@@ -81,8 +81,7 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
-          // OPTIMIZATION: Reduced max dimensions to 512px to massively save tokens (approx 60% reduction vs 800px)
-          // This helps prevent "Quota Exceeded" errors on the Free Tier.
+          // OPTIMIZATION: Max dimensions 512px
           const MAX_WIDTH = 512;
           const MAX_HEIGHT = 512;
 
@@ -102,8 +101,8 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
-          // Compress to JPEG at 0.7 quality
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          // Compress to JPEG at 0.5 quality to save bandwidth/tokens
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
           resolve(dataUrl.split(',')[1]); // Return just base64 data
         };
         img.onerror = (error) => reject(error);
