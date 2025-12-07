@@ -190,21 +190,24 @@ const App: React.FC = () => {
 
   // Hard Reset PWA
   const handleHardReset = async () => {
-      if (window.confirm("This will fix connection issues by resetting the app cache. Your saved logs will be kept. Proceed?")) {
-          // Unregister Service Workers
+      if (window.confirm("This will force your app to download the latest version from the server. Your logs are safe. Proceed?")) {
+          // 1. Unregister Service Workers
           if ('serviceWorker' in navigator) {
               const registrations = await navigator.serviceWorker.getRegistrations();
               for (const registration of registrations) {
                   await registration.unregister();
               }
           }
-          // Clear Cache Storage
+          
+          // 2. Clear Cache Storage
           if ('caches' in window) {
               const keys = await caches.keys();
               await Promise.all(keys.map(key => caches.delete(key)));
           }
-          // Reload
-          window.location.reload();
+          
+          // 3. NUCLEAR OPTION: Force a cache-busting navigation
+          // This appends a unique timestamp to the URL, forcing the browser to fetch a fresh index.html
+          window.location.href = window.location.pathname + '?reset=' + Date.now();
       }
   };
 
@@ -381,11 +384,11 @@ const App: React.FC = () => {
                   <button onClick={handleHardReset} className="w-full py-3 bg-red-50 text-red-600 rounded-xl font-medium flex justify-center items-center gap-2 hover:bg-red-100 transition-colors border border-red-100">
                       <RefreshCw size={18} /> Force Update / Fix Connection
                   </button>
-                  <p className="text-xs text-slate-400 mt-2 text-center">Use this if you are experiencing connection errors.</p>
+                  <p className="text-xs text-slate-400 mt-2 text-center">Tap this if you get "Server Busy" errors.</p>
               </div>
               
               <div className="pt-8 text-center">
-                  <p className="text-xs text-slate-400">NutriWise AI v1.2.4</p>
+                  <p className="text-sm font-bold text-slate-400">NutriWise AI <span className="text-slate-600">v1.3.0</span></p>
               </div>
             </div>
           </div>
