@@ -5,7 +5,7 @@ import EntryForm from './components/EntryForm';
 import ChatInterface from './components/ChatInterface';
 import HistoryView from './components/HistoryView';
 import { getPersonalizedAdvice, chatWithNutritionist, getInstantFeedback } from './services/geminiService';
-import { Home, PlusCircle, MessageCircle, User, Activity, CheckCircle, X, Loader2, Download, Upload } from 'lucide-react';
+import { Home, PlusCircle, MessageCircle, User, Activity, CheckCircle, X, Loader2, Download, Upload, RefreshCw } from 'lucide-react';
 import { isSameDay } from 'date-fns';
 
 // Default initial state
