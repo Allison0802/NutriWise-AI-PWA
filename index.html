@@ -32,7 +32,7 @@
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           // Add version param to force update
-          navigator.serviceWorker.register('/sw.js?v=14').then(registration => {
+          navigator.serviceWorker.register('/sw.js?v=16').then(registration => {
             console.log('SW registered');
           }).catch(err => {
             console.log('SW failed', err);

@@ -63,7 +63,7 @@ const refinementSchema: any = {
 };
 
 // List of models to try in order of preference.
-// Updated to use the 2.5/2.0 series as 1.5 is deprecated/restricted.
+// Removed gemini-1.5-flash as it is causing 404s.
 const CANDIDATE_MODELS = [
     "gemini-2.5-flash",
     "gemini-2.0-flash",
@@ -125,17 +125,23 @@ export default async function handler(req: any, res: any) {
                 // console.log(`Trying model: ${model}`);
                 return await operation(model);
             } catch (error: any) {
-                // Check if error is 404 (Not Found) or similar model unavailability
-                const isModelError = error.status === 404 || 
-                                     (error.message && error.message.includes("not found")) ||
-                                     (error.message && error.message.includes("not supported"));
+                const errMsg = error.message ? error.message.toLowerCase() : "";
+                const status = error.status || error.response?.status;
+
+                // Check for typical "Try another model" errors:
+                // 1. 404 Not Found (Model doesn't exist/deprecated)
+                // 2. 429 Too Many Requests (Rate Limit/Quota)
+                // 3. 503 Service Unavailable (Overloaded)
+                const isModelError = status === 404 || errMsg.includes("not found") || errMsg.includes("not supported");
+                const isRateLimit = status === 429 || status === 503 || errMsg.includes("quota") || errMsg.includes("busy");
                 
-                if (isModelError) {
-                    console.warn(`Model ${model} failed (Not Found). Retrying with next candidate...`);
+                if (isModelError || isRateLimit) {
+                    console.warn(`Model ${model} failed (${status || 'Error'}). Retrying with next candidate...`);
                     lastError = error;
-                    continue;
+                    continue; // Try next model in loop
                 }
-                // If it's a rate limit (429) or other error, throw immediately (handled by frontend retry)
+                
+                // If it's another error (like 400 Bad Request), throw immediately
                 throw error;
             }
         }
