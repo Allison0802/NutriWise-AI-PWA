@@ -62,12 +62,12 @@ const refinementSchema: any = {
   required: ["updatedItems", "assistantResponse"]
 };
 
-// List of models to try in order of preference if one is not found (404)
+// List of models to try in order of preference.
+// Updated to use the 2.5/2.0 series as 1.5 is deprecated/restricted.
 const CANDIDATE_MODELS = [
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-002",
-    "gemini-1.5-flash-001",
-    "gemini-1.5-pro"
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-flash-latest"
 ];
 
 export default async function handler(req: any, res: any) {
