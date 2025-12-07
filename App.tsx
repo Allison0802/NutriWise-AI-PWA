@@ -67,6 +67,17 @@ const App: React.FC = () => {
     localStorage.setItem('nutriwise_chat', JSON.stringify(chatHistory));
   }, [chatHistory]);
 
+  // Helper to remove heavy image data from logs before sending to AI context
+  const stripImage = (log: LogEntry): LogEntry => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { image, ...rest } = log;
+    return rest as LogEntry;
+  };
+
+  const stripImages = (logs: LogEntry[]): LogEntry[] => {
+    return logs.map(stripImage);
+  };
+
   const handleSaveEntry = async (entry: LogEntry) => {
     let updatedLogs;
     if (editingLog) {
@@ -82,7 +93,9 @@ const App: React.FC = () => {
     setFeedbackModal({ isOpen: true, isLoading: true, message: null });
     
     try {
-        const feedback = await getInstantFeedback(entry, profile);
+        // CRITICAL: Strip image data to save thousands of tokens
+        const cleanEntry = stripImage(entry);
+        const feedback = await getInstantFeedback(cleanEntry, profile);
         setFeedbackModal({ isOpen: true, isLoading: false, message: feedback });
     } catch (e) {
         // Silent failover - if quota exceeded, just show generic success
@@ -105,7 +118,9 @@ const App: React.FC = () => {
   const handleGenerateAdvice = async () => {
     setIsAdviceLoading(true);
     try {
-        const result = await getPersonalizedAdvice(logs, profile);
+        // CRITICAL: Strip images from history
+        const cleanLogs = stripImages(logs);
+        const result = await getPersonalizedAdvice(cleanLogs, profile);
         setAdvice(result);
     } catch (e) {
         setAdvice("Advice currently unavailable.");
@@ -121,7 +136,9 @@ const App: React.FC = () => {
       setIsChatLoading(true);
 
       // Prepare context for AI (Recent history only to save tokens)
-      const recentLogs = logs.slice(0, 20); // Reduced from 100 to 20
+      // CRITICAL: Strip images and reduce count
+      const recentLogs = stripImages(logs.slice(0, 20)); 
+      
       const historyContext = updatedHistory.map(msg => ({
           role: msg.role,
           parts: [{ text: msg.text }]
@@ -368,7 +385,7 @@ const App: React.FC = () => {
               </div>
               
               <div className="pt-8 text-center">
-                  <p className="text-xs text-slate-400">NutriWise AI v1.2.2</p>
+                  <p className="text-xs text-slate-400">NutriWise AI v1.2.3</p>
               </div>
             </div>
           </div>
