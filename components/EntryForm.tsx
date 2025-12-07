@@ -81,9 +81,10 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
-          // OPTIMIZATION: Reduced max dimensions from 1024 to 800 to save tokens
-          const MAX_WIDTH = 800;
-          const MAX_HEIGHT = 800;
+          // OPTIMIZATION: Reduced max dimensions to 512px to massively save tokens (approx 60% reduction vs 800px)
+          // This helps prevent "Quota Exceeded" errors on the Free Tier.
+          const MAX_WIDTH = 512;
+          const MAX_HEIGHT = 512;
 
           if (width > height) {
             if (width > MAX_WIDTH) {
@@ -101,7 +102,7 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
-          // Compress to JPEG at 0.7 quality to save space and ensure upload success
+          // Compress to JPEG at 0.7 quality
           const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
           resolve(dataUrl.split(',')[1]); // Return just base64 data
         };
@@ -139,9 +140,9 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
     } catch (error: any) {
       const msg = error.message || "";
       if (msg.includes("429") || msg.includes("busy")) {
-         alert("Server is currently busy (High Traffic). Please wait 30 seconds and try again.");
+         alert("Server is extremely busy (Rate Limit). Waiting a moment before retrying usually works.");
       } else {
-         alert(`Analysis failed: ${msg}. Please try again.`);
+         alert(`Analysis failed: ${msg}. Try reducing image size or try again.`);
       }
     } finally {
       setIsAnalyzing(false);

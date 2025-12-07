@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 
 // Helper to robustly extract JSON from AI text response
@@ -61,6 +62,20 @@ const refinementSchema: any = {
   required: ["updatedItems", "assistantResponse"]
 };
 
+// Helper: Attempt generation with fallback models
+async function generateWithFallback(genAI: GoogleGenAI, primaryModel: string, fallbackModel: string, params: any) {
+    try {
+        console.log(`Attempting with primary model: ${primaryModel}`);
+        return await genAI.models.generateContent({ ...params, model: primaryModel });
+    } catch (error: any) {
+        if (error.status === 404 || error.status === 429 || error.message?.includes("not found") || error.message?.includes("quota")) {
+             console.warn(`Primary model failed (${error.status || 'Error'}). Switching to fallback: ${fallbackModel}`);
+             return await genAI.models.generateContent({ ...params, model: fallbackModel });
+        }
+        throw error;
+    }
+}
+
 export default async function handler(req: any, res: any) {
   // Set CORS headers for Vercel
   res.setHeader('Access-Control-Allow-Credentials', true);
@@ -101,9 +116,12 @@ export default async function handler(req: any, res: any) {
     }
 
     const { action, payload } = req.body;
-    const MODEL_NAME = "gemini-2.5-flash"; // Updated to current stable model
+    
+    // Strategy: Try the robust 2.5 flash, fallback to the generic 'latest' alias which is usually highly available
+    const PRIMARY_MODEL = "gemini-2.5-flash";
+    const FALLBACK_MODEL = "gemini-flash-latest";
 
-    console.log(`Processing action: ${action} with model ${MODEL_NAME}`);
+    console.log(`Processing action: ${action}`);
 
     if (!action) {
          return res.status(400).json({ error: "Missing action in request body" });
@@ -128,8 +146,7 @@ export default async function handler(req: any, res: any) {
       `;
       parts.push({ text: prompt });
 
-      const response = await genAI.models.generateContent({
-        model: MODEL_NAME,
+      const response = await generateWithFallback(genAI, PRIMARY_MODEL, FALLBACK_MODEL, {
         contents: { parts },
         config: {
           responseMimeType: "application/json",
@@ -156,8 +173,7 @@ export default async function handler(req: any, res: any) {
 
             Return the FULL updated list of items.
         `;
-      const response = await genAI.models.generateContent({
-        model: MODEL_NAME,
+      const response = await generateWithFallback(genAI, PRIMARY_MODEL, FALLBACK_MODEL, {
         contents: { parts: [{ text: prompt }] },
         config: {
           responseMimeType: "application/json",
@@ -170,8 +186,7 @@ export default async function handler(req: any, res: any) {
 
     if (action === 'estimateExerciseCalories') {
       const { name, duration, intensity, profile } = payload;
-      const response = await genAI.models.generateContent({
-        model: MODEL_NAME,
+      const response = await generateWithFallback(genAI, PRIMARY_MODEL, FALLBACK_MODEL, {
         contents: `
           Estimate the calories burned for this activity/exercise.
           Activity Name: "${name}"
@@ -212,8 +227,7 @@ export default async function handler(req: any, res: any) {
     if (action === 'getPersonalizedAdvice') {
       const { logs, profile } = payload;
       const recentLogs = logs.slice(0, 20);
-      const response = await genAI.models.generateContent({
-        model: MODEL_NAME,
+      const response = await generateWithFallback(genAI, PRIMARY_MODEL, FALLBACK_MODEL, {
         contents: `
           Analyze these user logs and profile to find trends and offer body recomposition advice.
           Profile: ${JSON.stringify(profile)}
@@ -231,8 +245,7 @@ export default async function handler(req: any, res: any) {
 
     if (action === 'getInstantFeedback') {
       const { entry, profile } = payload;
-      const response = await genAI.models.generateContent({
-        model: MODEL_NAME,
+      const response = await generateWithFallback(genAI, PRIMARY_MODEL, FALLBACK_MODEL, {
         contents: `
           Generate a single, short (max 15 words), encouraging or witty comment for this user's new log entry.
           Entry: ${JSON.stringify(entry)}
@@ -249,23 +262,37 @@ export default async function handler(req: any, res: any) {
 
     if (action === 'chatWithNutritionist') {
       const { history, message, context } = payload;
-      const chat = genAI.chats.create({
-        model: MODEL_NAME,
-        config: {
-          systemInstruction: `
-            You are a supportive, evidence-based nutritionist assistant.
-            Current User Context:
-            Profile: ${JSON.stringify(context.profile)}
-            Recent Logs (History): ${JSON.stringify(context.logs)}
-            
-            Answer questions about nutrition, exercise, and the user's data. 
-            Be encouraging but scientifically rigorous. 
-            Keep responses concise.
-            Consider age, gender, and hormonal factors.
-          `,
-        },
-        history: history,
-      });
+      // Chat is stateful, so we can't easily fallback mid-session without recreating the chat object.
+      // We will try to create the chat with primary, if it fails immediately, try fallback.
+      let chat;
+      try {
+           chat = genAI.chats.create({
+            model: PRIMARY_MODEL,
+            config: {
+              systemInstruction: `
+                You are a supportive, evidence-based nutritionist assistant.
+                Current User Context:
+                Profile: ${JSON.stringify(context.profile)}
+                Recent Logs (History): ${JSON.stringify(context.logs)}
+                
+                Answer questions about nutrition, exercise, and the user's data. 
+                Be encouraging but scientifically rigorous. 
+                Keep responses concise.
+                Consider age, gender, and hormonal factors.
+              `,
+            },
+            history: history,
+          });
+      } catch (e) {
+          // Fallback init
+          chat = genAI.chats.create({
+            model: FALLBACK_MODEL,
+            config: {
+               systemInstruction: `You are a helpful nutritionist assistant. Profile: ${JSON.stringify(context.profile)}`,
+            },
+            history: history
+          });
+      }
 
       const result = await chat.sendMessage({ message });
       return res.status(200).json({ text: result.text });
@@ -278,7 +305,7 @@ export default async function handler(req: any, res: any) {
     // Return the specific status code from Gemini if available, otherwise 500
     // If the error message mentions 429 or quota, force 429 status
     let status = error.status || error.response?.status || 500;
-    if (error.message && (error.message.includes("429") || error.message.includes("Quota"))) {
+    if (error.message && (error.message.includes("429") || error.message.includes("Quota") || error.message.includes("quota"))) {
         status = 429;
     }
     res.status(status).json({ error: error.message || "Internal Server Error" });

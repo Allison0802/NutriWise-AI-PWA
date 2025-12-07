@@ -1,3 +1,4 @@
+
 import { FoodItem, UserProfile, LogEntry } from "../types";
 
 const API_ENDPOINT = '/api/gemini';
@@ -52,8 +53,8 @@ const callApi = async (action: string, payload: any, retries = 3) => {
            throw error;
       }
       
-      // Exponential backoff: 2s, 4s, 8s
-      const delay = Math.pow(2, i + 1) * 1000;
+      // Exponential backoff: 3s, 6s, 12s - extended for mobile robustness
+      const delay = Math.pow(2, i + 1) * 1500;
       console.warn(`API call failed (${action}), retrying in ${delay}ms...`, error.message);
       await new Promise(resolve => setTimeout(resolve, delay));
     }

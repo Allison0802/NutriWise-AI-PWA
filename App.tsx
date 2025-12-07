@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { UserProfile, LogEntry, ViewState, ChatMessage } from './types';
 import Dashboard from './components/Dashboard';
@@ -5,7 +6,7 @@ import EntryForm from './components/EntryForm';
 import ChatInterface from './components/ChatInterface';
 import HistoryView from './components/HistoryView';
 import { getPersonalizedAdvice, chatWithNutritionist, getInstantFeedback } from './services/geminiService';
-import { Home, PlusCircle, MessageCircle, User, Activity, CheckCircle, X, Loader2, Download, Upload, RefreshCw } from 'lucide-react';
+import { Home, PlusCircle, MessageCircle, User, Activity, CheckCircle, X, Loader2, Download, Upload, RefreshCw, AlertTriangle } from 'lucide-react';
 import { isSameDay } from 'date-fns';
 
 // Default initial state
@@ -66,45 +67,33 @@ const App: React.FC = () => {
     localStorage.setItem('nutriwise_chat', JSON.stringify(chatHistory));
   }, [chatHistory]);
 
-  // REMOVED: Automatic advice generation useEffect to save tokens.
-  // Advice is now triggered manually via handleGenerateAdvice.
-
-  const handleGenerateAdvice = async () => {
-      if (logs.length === 0) return;
-      setIsAdviceLoading(true);
-      try {
-        const result = await getPersonalizedAdvice(logs, profile);
-        setAdvice(result);
-      } catch (e) {
-        setAdvice("Could not generate advice. Try again later.");
-      } finally {
-        setIsAdviceLoading(false);
-      }
-  };
-
   const handleSaveEntry = async (entry: LogEntry) => {
+    let updatedLogs;
     if (editingLog) {
-      setLogs(prev => prev.map(log => log.id === entry.id ? entry : log));
+      updatedLogs = logs.map(l => l.id === entry.id ? entry : l);
       setEditingLog(null);
-      setView('dashboard');
     } else {
-      setLogs(prev => [entry, ...prev]);
-      setView('dashboard');
-      // Trigger Feedback for all new logs (Food, Exercise, Note)
-      setFeedbackModal({ isOpen: true, isLoading: true, message: null });
-      try {
-           const message = await getInstantFeedback(entry, profile);
-           setFeedbackModal({ isOpen: true, isLoading: false, message });
-      } catch (e) {
-           // Silent failover: If quota exceeded or error, just show generic success message
-           setFeedbackModal({ isOpen: true, isLoading: false, message: "Entry saved successfully!" });
-      }
+      updatedLogs = [entry, ...logs];
+    }
+    setLogs(updatedLogs);
+    setView('dashboard');
+
+    // Trigger Instant Feedback Modal
+    setFeedbackModal({ isOpen: true, isLoading: true, message: null });
+    
+    try {
+        const feedback = await getInstantFeedback(entry, profile);
+        setFeedbackModal({ isOpen: true, isLoading: false, message: feedback });
+    } catch (e) {
+        // Silent failover - if quota exceeded, just show generic success
+        console.warn("Feedback skipped due to API limit");
+        setFeedbackModal({ isOpen: true, isLoading: false, message: "Entry saved successfully!" });
     }
   };
 
   const handleDeleteLog = (id: string) => {
-    if (window.confirm("Are you sure you want to delete this entry?")) {
-        setLogs(prev => prev.filter(log => log.id !== id));
+    if (window.confirm("Are you sure you want to delete this log?")) {
+        setLogs(logs.filter(l => l.id !== id));
     }
   };
 
@@ -113,172 +102,154 @@ const App: React.FC = () => {
     setView('add');
   };
 
-  const handleCancelEntry = () => {
-      setEditingLog(null);
-      setView('dashboard');
-  }
+  const handleGenerateAdvice = async () => {
+    setIsAdviceLoading(true);
+    try {
+        const result = await getPersonalizedAdvice(logs, profile);
+        setAdvice(result);
+    } catch (e) {
+        setAdvice("Advice currently unavailable.");
+    } finally {
+        setIsAdviceLoading(false);
+    }
+  };
 
   const handleSendChatMessage = async (text: string) => {
-      if (!text.trim()) return;
-      
-      const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', text, timestamp: Date.now() };
-      setChatHistory(prev => [...prev, userMsg]);
+      const newUserMsg: ChatMessage = { id: Date.now().toString(), role: 'user', text, timestamp: Date.now() };
+      const updatedHistory = [...chatHistory, newUserMsg];
+      setChatHistory(updatedHistory);
       setIsChatLoading(true);
 
-      // OPTIMIZATION: Only send today's logs + last 5 entries to reduce Token usage significantly
-      const today = new Date();
-      const recentLogs = logs
-        .filter(l => isSameDay(new Date(l.timestamp), today))
-        .sort((a, b) => b.timestamp - a.timestamp);
-      
-      // Add a fallback if today is empty, just take last 5
-      const contextLogs = recentLogs.length > 0 ? recentLogs : logs.slice(0, 5);
-
-      const historyContext = chatHistory.map(m => ({
-          role: m.role,
-          parts: [{ text: m.text }]
+      // Prepare context for AI (Recent history only to save tokens)
+      const recentLogs = logs.slice(0, 20); // Reduced from 100 to 20
+      const historyContext = updatedHistory.map(msg => ({
+          role: msg.role,
+          parts: [{ text: msg.text }]
       }));
 
-      const responseText = await chatWithNutritionist(historyContext, text, { profile, logs: contextLogs });
-
-      const modelMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'model', text: responseText, timestamp: Date.now() };
-      setChatHistory(prev => [...prev, modelMsg]);
+      const responseText = await chatWithNutritionist(historyContext, text, { profile, logs: recentLogs });
+      
+      const newAiMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'model', text: responseText, timestamp: Date.now() };
+      setChatHistory([...updatedHistory, newAiMsg]);
       setIsChatLoading(false);
-  }
+  };
 
   const handleClearChat = () => {
-      // Immediate reset without confirmation to ensure UI responsiveness
-      const newId = Date.now().toString();
-      setChatHistory([{ 
-          id: newId, 
-          role: 'model', 
-          text: 'Hi! I can help you analyze your nutrition logs, suggest meals, or answer health questions. What can I do for you?', 
-          timestamp: Date.now() 
-      }]);
+      setChatHistory([]); 
   };
 
-  const closeFeedbackModal = () => {
-      setFeedbackModal({ isOpen: false, isLoading: false, message: null });
+  // Export Data
+  const handleExportData = () => {
+      const dataStr = JSON.stringify({ profile, logs, chatHistory });
+      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+      const exportFileDefaultName = `nutriwise_backup_${new Date().toISOString().slice(0,10)}.json`;
+      
+      const linkElement = document.createElement('a');
+      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('download', exportFileDefaultName);
+      linkElement.click();
   };
 
-  const exportData = () => {
-      const data = { profile, logs };
-      const jsonString = JSON.stringify(data);
-      const blob = new Blob([jsonString], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "nutriwise_backup.json";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-  };
-
-  const importData = (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (file) {
-          const reader = new FileReader();
-          reader.onload = (e) => {
+  // Import Data
+  const handleImportData = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const fileReader = new FileReader();
+      if (event.target.files && event.target.files.length > 0) {
+          fileReader.readAsText(event.target.files[0], "UTF-8");
+          fileReader.onload = e => {
               try {
-                  const content = e.target?.result as string;
-                  const data = JSON.parse(content);
-                  if (data.profile && data.logs) {
-                      setProfile(data.profile);
-                      setLogs(data.logs);
+                  if (e.target?.result) {
+                      const parsed = JSON.parse(e.target.result as string);
+                      if (parsed.profile) setProfile(parsed.profile);
+                      if (parsed.logs) setLogs(parsed.logs);
+                      if (parsed.chatHistory) setChatHistory(parsed.chatHistory);
                       alert("Data restored successfully!");
-                  } else {
-                      alert("Invalid backup file format.");
                   }
               } catch (error) {
-                  alert("Failed to parse backup file.");
+                  alert("Invalid backup file.");
               }
           };
-          reader.readAsText(file);
+      }
+  };
+
+  // Hard Reset PWA
+  const handleHardReset = async () => {
+      if (window.confirm("This will fix connection issues by resetting the app cache. Your saved logs will be kept. Proceed?")) {
+          // Unregister Service Workers
+          if ('serviceWorker' in navigator) {
+              const registrations = await navigator.serviceWorker.getRegistrations();
+              for (const registration of registrations) {
+                  await registration.unregister();
+              }
+          }
+          // Clear Cache Storage
+          if ('caches' in window) {
+              const keys = await caches.keys();
+              await Promise.all(keys.map(key => caches.delete(key)));
+          }
+          // Reload
+          window.location.reload();
       }
   };
 
   return (
-    <div className="max-w-md mx-auto h-screen bg-slate-50 flex flex-col relative overflow-hidden shadow-2xl">
+    <div className="flex flex-col h-screen bg-slate-50 max-w-md mx-auto shadow-2xl overflow-hidden relative">
       
-      {/* Feedback Modal Overlay */}
-      {feedbackModal.isOpen && (
-          <div className="absolute inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
-              <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl transform transition-all scale-100">
-                  {feedbackModal.isLoading ? (
-                      <div className="flex flex-col items-center py-4">
-                          <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-3" />
-                          <p className="text-slate-600 font-medium animate-pulse">Analyzing your entry...</p>
-                      </div>
-                  ) : (
-                      <div className="text-center">
-                          <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4 text-emerald-600">
-                              <CheckCircle size={24} />
-                          </div>
-                          <h3 className="text-xl font-bold text-slate-800 mb-2">Logged!</h3>
-                          <p className="text-slate-600 mb-6 leading-relaxed">
-                              "{feedbackModal.message}"
-                          </p>
-                          <button 
-                              onClick={closeFeedbackModal}
-                              className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors"
-                          >
-                              Awesome
-                          </button>
-                      </div>
-                  )}
-              </div>
-          </div>
-      )}
-
-      {/* Main Content Area - now overflow-hidden to let children handle scroll */}
-      <main className="flex-1 overflow-hidden relative flex flex-col">
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-hidden relative">
         {view === 'dashboard' && (
-          <div className="h-full overflow-y-auto no-scrollbar">
-             <div className="p-4">
-                <div className="mb-6 bg-gradient-to-r from-emerald-600 to-emerald-800 rounded-2xl p-4 text-white shadow-lg relative overflow-hidden">
-                    <h3 className="flex items-center gap-2 font-bold mb-2 text-sm uppercase tracking-wide opacity-90 relative z-10">
-                      <Activity size={16} /> Daily Insight
+          <div className="h-full overflow-y-auto no-scrollbar px-4 pt-4">
+            <Dashboard 
+                logs={logs} 
+                profile={profile} 
+                onViewHistory={() => setView('history')} 
+                onEdit={handleEditLog}
+                onDelete={handleDeleteLog}
+            />
+            
+            {/* Manual Advice Section */}
+            <div className="mb-24 bg-white p-4 rounded-xl border border-emerald-100 shadow-sm">
+                <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-semibold text-emerald-800 flex items-center gap-2">
+                        <Activity size={18} /> Daily Insight
                     </h3>
-                    
-                    {advice ? (
-                         <div className="text-sm leading-relaxed opacity-95 relative z-10">
-                            {advice.split('\n').map((line, i) => (
-                                <p key={i} className="mb-1">{line}</p>
-                            ))}
-                            <button 
-                                onClick={handleGenerateAdvice}
-                                className="mt-3 text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
-                            >
-                                <RefreshCw className="w-3 h-3" /> Refresh
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="relative z-10">
-                            <p className="text-sm opacity-90 mb-3">Generate personalized advice based on your recent activity.</p>
-                            <button 
-                                onClick={handleGenerateAdvice}
-                                disabled={isAdviceLoading}
-                                className="bg-white text-emerald-800 px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-emerald-50 transition-colors flex items-center gap-2"
-                            >
-                                {isAdviceLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Activity size={16}/>}
-                                {isAdviceLoading ? 'Analyzing...' : 'Generate Insight'}
-                            </button>
-                        </div>
+                    {!advice && (
+                        <button 
+                            onClick={handleGenerateAdvice} 
+                            disabled={isAdviceLoading}
+                            className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-medium"
+                        >
+                            {isAdviceLoading ? 'Generating...' : 'Generate'}
+                        </button>
                     )}
-                    
-                    {/* Background Pattern */}
-                    <Activity className="absolute -bottom-4 -right-4 w-32 h-32 text-white/10" />
                 </div>
-
-                <Dashboard 
-                    logs={logs} 
-                    profile={profile} 
-                    onViewHistory={() => setView('history')} 
-                    onEdit={handleEditLog}
-                    onDelete={handleDeleteLog}
-                />
-              </div>
+                {advice ? (
+                    <p className="text-sm text-slate-600 italic">{advice}</p>
+                ) : (
+                    <p className="text-xs text-slate-400">Tap generate to get AI insights based on your recent logs.</p>
+                )}
+            </div>
           </div>
+        )}
+
+        {view === 'add' && (
+          <EntryForm 
+            onSave={handleSaveEntry} 
+            onCancel={() => { setEditingLog(null); setView('dashboard'); }} 
+            userProfile={profile}
+            initialEntry={editingLog}
+            chatHistory={chatHistory} // Pass for consistency if needed
+            onChat={handleSendChatMessage}
+            isChatLoading={isChatLoading}
+          />
+        )}
+
+        {view === 'chat' && (
+          <ChatInterface 
+            messages={chatHistory} 
+            onSendMessage={handleSendChatMessage} 
+            onClearChat={handleClearChat}
+            isLoading={isChatLoading}
+          />
         )}
 
         {view === 'history' && (
@@ -290,131 +261,178 @@ const App: React.FC = () => {
             />
         )}
 
-        {view === 'add' && (
-          <EntryForm 
-            onSave={handleSaveEntry} 
-            onCancel={handleCancelEntry} 
-            userProfile={profile} 
-            initialEntry={editingLog}
-            chatHistory={chatHistory}
-            onChat={handleSendChatMessage}
-            isChatLoading={isChatLoading}
-          />
-        )}
-
-        {view === 'chat' && (
-          <ChatInterface 
-             messages={chatHistory}
-             onSendMessage={handleSendChatMessage}
-             onClearChat={handleClearChat}
-             isLoading={isChatLoading}
-          />
-        )}
-
         {view === 'profile' && (
-          <div className="h-full overflow-y-auto no-scrollbar p-6 pb-24">
-             <h2 className="text-2xl font-bold text-slate-800 mb-6">Profile Settings</h2>
-             <div className="space-y-4">
-                 <div>
-                     <label className="block text-sm font-medium text-slate-700">Display Name</label>
-                     <input type="text" value={profile.name} onChange={e => setProfile({...profile, name: e.target.value})} className="w-full mt-1 p-3 border rounded-xl" />
-                 </div>
-                 
-                 <div>
-                     <label className="block text-sm font-medium text-slate-700">Gender</label>
-                     <select value={profile.gender} onChange={e => setProfile({...profile, gender: e.target.value as any})} className="w-full mt-1 p-3 border rounded-xl bg-white">
-                         <option value="male">Male</option>
-                         <option value="female">Female</option>
-                         <option value="other">Other</option>
-                     </select>
-                 </div>
+          <div className="h-full overflow-y-auto p-6 pb-24 no-scrollbar">
+            <h2 className="text-2xl font-bold mb-6 text-slate-800">Your Profile</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
+                <input
+                  type="text"
+                  value={profile.name}
+                  onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                  className="w-full p-3 border rounded-xl"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Age</label>
+                  <input
+                    type="number"
+                    value={profile.age}
+                    onChange={(e) => setProfile({ ...profile, age: parseInt(e.target.value) || 0 })}
+                    className="w-full p-3 border rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Gender</label>
+                  <select
+                    value={profile.gender}
+                    onChange={(e) => setProfile({ ...profile, gender: e.target.value as any })}
+                    className="w-full p-3 border rounded-xl bg-white"
+                  >
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Height (cm)</label>
+                  <input
+                    type="number"
+                    value={profile.heightCm}
+                    onChange={(e) => setProfile({ ...profile, heightCm: parseInt(e.target.value) || 0 })}
+                    className="w-full p-3 border rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Weight (kg)</label>
+                  <input
+                    type="number"
+                    value={profile.weightKg}
+                    onChange={(e) => setProfile({ ...profile, weightKg: parseInt(e.target.value) || 0 })}
+                    className="w-full p-3 border rounded-xl"
+                  />
+                </div>
+              </div>
 
-                 <div className="grid grid-cols-2 gap-4">
-                     <div>
-                        <label className="block text-sm font-medium text-slate-700">Weight (kg)</label>
-                        <input type="number" value={profile.weightKg} onChange={e => setProfile({...profile, weightKg: parseFloat(e.target.value)})} className="w-full mt-1 p-3 border rounded-xl" />
-                     </div>
-                     <div>
-                        <label className="block text-sm font-medium text-slate-700">Height (cm)</label>
-                        <input type="number" value={profile.heightCm} onChange={e => setProfile({...profile, heightCm: parseFloat(e.target.value)})} className="w-full mt-1 p-3 border rounded-xl" />
-                     </div>
-                 </div>
-                 <div>
-                     <label className="block text-sm font-medium text-slate-700">Goal</label>
-                     <select value={profile.goal} onChange={e => setProfile({...profile, goal: e.target.value as any})} className="w-full mt-1 p-3 border rounded-xl bg-white">
-                         <option value="lose_fat">Lose Fat</option>
-                         <option value="maintain">Maintain Weight</option>
-                         <option value="gain_muscle">Build Muscle</option>
-                     </select>
-                 </div>
-                 <div>
-                     <label className="block text-sm font-medium text-slate-700">Activity Level</label>
-                     <select value={profile.activityLevel} onChange={e => setProfile({...profile, activityLevel: e.target.value as any})} className="w-full mt-1 p-3 border rounded-xl bg-white">
-                         <option value="sedentary">Sedentary (Office job)</option>
-                         <option value="light">Light Activity</option>
-                         <option value="moderate">Moderate Exercise</option>
-                         <option value="active">Active</option>
-                         <option value="athlete">Athlete</option>
-                     </select>
-                 </div>
-                 <button className="w-full bg-slate-800 text-white py-3 rounded-xl font-medium mt-4" onClick={() => setView('dashboard')}>Save Profile</button>
-             
-                 <div className="pt-8 border-t border-slate-200 mt-8">
-                      <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-4">Data Management</h3>
-                      <div className="flex gap-3">
-                          <button onClick={exportData} className="flex-1 flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600">
-                              <Download size={24} className="mb-2 text-emerald-600"/>
-                              <span className="text-sm font-medium">Backup Data</span>
-                          </button>
-                          <label className="flex-1 flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600 cursor-pointer">
-                              <Upload size={24} className="mb-2 text-blue-600"/>
-                              <span className="text-sm font-medium">Restore Data</span>
-                              <input type="file" accept=".json" onChange={importData} className="hidden" />
-                          </label>
-                      </div>
-                      <p className="text-xs text-slate-400 mt-2 text-center">Use this to move your data to the production URL.</p>
-                      <p className="text-[10px] text-slate-300 mt-4 text-center">App Version v1.2.0</p>
-                 </div>
-             </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Activity Level</label>
+                <select
+                  value={profile.activityLevel}
+                  onChange={(e) => setProfile({ ...profile, activityLevel: e.target.value as any })}
+                  className="w-full p-3 border rounded-xl bg-white"
+                >
+                  <option value="sedentary">Sedentary (Office job)</option>
+                  <option value="light">Lightly Active (1-3 days/week)</option>
+                  <option value="moderate">Moderately Active (3-5 days/week)</option>
+                  <option value="active">Very Active (6-7 days/week)</option>
+                  <option value="athlete">Athlete (2x per day)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Goal</label>
+                <select
+                  value={profile.goal}
+                  onChange={(e) => setProfile({ ...profile, goal: e.target.value as any })}
+                  className="w-full p-3 border rounded-xl bg-white"
+                >
+                  <option value="lose_fat">Lose Fat</option>
+                  <option value="maintain">Maintain Weight</option>
+                  <option value="gain_muscle">Gain Muscle</option>
+                </select>
+              </div>
+              
+              <div className="pt-6 border-t border-slate-200">
+                  <h3 className="text-sm font-semibold text-slate-600 mb-3">Data Management</h3>
+                  <div className="flex gap-3">
+                      <button onClick={handleExportData} className="flex-1 py-3 bg-blue-50 text-blue-700 rounded-xl font-medium flex justify-center items-center gap-2 hover:bg-blue-100 transition-colors">
+                          <Download size={18} /> Backup
+                      </button>
+                      <label className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-medium flex justify-center items-center gap-2 hover:bg-slate-200 transition-colors cursor-pointer">
+                          <Upload size={18} /> Restore
+                          <input type="file" onChange={handleImportData} className="hidden" accept=".json" />
+                      </label>
+                  </div>
+              </div>
+
+               <div className="pt-4 border-t border-slate-200">
+                  <h3 className="text-sm font-semibold text-red-600 mb-3">Troubleshooting</h3>
+                  <button onClick={handleHardReset} className="w-full py-3 bg-red-50 text-red-600 rounded-xl font-medium flex justify-center items-center gap-2 hover:bg-red-100 transition-colors border border-red-100">
+                      <RefreshCw size={18} /> Force Update / Fix Connection
+                  </button>
+                  <p className="text-xs text-slate-400 mt-2 text-center">Use this if you are experiencing connection errors.</p>
+              </div>
+              
+              <div className="pt-8 text-center">
+                  <p className="text-xs text-slate-400">NutriWise AI v1.2.2</p>
+              </div>
+            </div>
           </div>
         )}
       </main>
 
-      {/* Bottom Navigation */}
-      {view !== 'add' && view !== 'history' && (
-        <nav className="bg-white border-t border-slate-200 px-6 py-3 flex justify-between items-center sticky bottom-0 z-50 safe-area-bottom">
-          <button 
-            onClick={() => setView('dashboard')}
-            className={`flex flex-col items-center gap-1 ${view === 'dashboard' ? 'text-emerald-600' : 'text-slate-400'}`}
-          >
-            <Home size={24} strokeWidth={view === 'dashboard' ? 2.5 : 2} />
-            <span className="text-[10px] font-medium">Home</span>
-          </button>
-
-          {/* Floating Add Button */}
-          <button 
-            onClick={() => { setEditingLog(null); setView('add'); }}
-            className="bg-emerald-600 text-white p-4 rounded-full shadow-emerald-200 shadow-xl transform -translate-y-4 hover:scale-105 transition-transform"
-          >
-            <PlusCircle size={32} />
-          </button>
-
-          <button 
-            onClick={() => setView('chat')}
-             className={`flex flex-col items-center gap-1 ${view === 'chat' ? 'text-emerald-600' : 'text-slate-400'}`}
-          >
-            <MessageCircle size={24} strokeWidth={view === 'chat' ? 2.5 : 2} />
-            <span className="text-[10px] font-medium">AI Chat</span>
-          </button>
-          
-          <button 
-            onClick={() => setView('profile')}
-             className={`flex flex-col items-center gap-1 ${view === 'profile' ? 'text-emerald-600' : 'text-slate-400'}`}
-          >
-            <User size={24} strokeWidth={view === 'profile' ? 2.5 : 2} />
-            <span className="text-[10px] font-medium">Profile</span>
-          </button>
+      {/* Navigation Bar */}
+      {view !== 'add' && (
+        <nav className="bg-white border-t border-slate-200 p-2 safe-area-bottom z-50">
+          <div className="flex justify-around items-center">
+            <button
+              onClick={() => setView('dashboard')}
+              className={`p-3 rounded-2xl transition-all ${view === 'dashboard' ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400'}`}
+            >
+              <Home size={24} />
+            </button>
+            <button
+              onClick={() => { setEditingLog(null); setView('add'); }}
+              className="p-4 bg-emerald-600 text-white rounded-full shadow-lg hover:bg-emerald-700 transform hover:scale-105 transition-all -mt-8 border-4 border-slate-50"
+            >
+              <PlusCircle size={32} />
+            </button>
+            <button
+              onClick={() => setView('chat')}
+              className={`p-3 rounded-2xl transition-all ${view === 'chat' ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400'}`}
+            >
+              <MessageCircle size={24} />
+            </button>
+            <button
+              onClick={() => setView('profile')}
+              className={`p-3 rounded-2xl transition-all ${view === 'profile' ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400'}`}
+            >
+              <User size={24} />
+            </button>
+          </div>
         </nav>
+      )}
+
+      {/* Feedback Modal */}
+      {feedbackModal.isOpen && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white p-6 rounded-2xl shadow-xl max-w-sm w-full text-center relative animate-in zoom-in-95 duration-200">
+            {feedbackModal.isLoading ? (
+                <div className="py-8">
+                    <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mx-auto mb-4" />
+                    <p className="text-slate-600 font-medium">Analyzing your entry...</p>
+                </div>
+            ) : (
+                <>
+                    <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <CheckCircle size={28} />
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-800 mb-2">Log Saved!</h3>
+                    <p className="text-slate-600 italic mb-6">"{feedbackModal.message}"</p>
+                    <button 
+                        onClick={() => setFeedbackModal({ ...feedbackModal, isOpen: false })}
+                        className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700"
+                    >
+                        Awesome
+                    </button>
+                </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
