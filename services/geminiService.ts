@@ -10,7 +10,11 @@ const callApi = async (action: string, payload: any, retries = 3) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
         },
+        cache: 'no-store',
         body: JSON.stringify({ action, payload }),
       });
 
