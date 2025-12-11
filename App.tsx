@@ -407,7 +407,7 @@ const App: React.FC = () => {
               </div>
               
               <div className="pt-8 text-center">
-                  <p className="text-sm font-bold text-slate-400">NutriWise AI <span className="text-red-500 font-extrabold text-lg">v1.3.2</span></p>
+                  <p className="text-sm font-bold text-slate-400">NutriWise AI <span className="text-red-500 font-extrabold text-lg">v1.3.3</span></p>
               </div>
             </div>
           </div>

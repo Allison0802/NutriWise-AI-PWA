@@ -224,7 +224,7 @@ import React, { useMemo } from 'react';
                 .map(log => (
                     <div key={log.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-start gap-3 relative group">
                         <div className={`mt-1 w-2 h-2 rounded-full ${log.type === 'food' ? 'bg-emerald-400' : log.type === 'exercise' ? 'bg-orange-400' : 'bg-blue-400'}`} />
-                        <div className="flex-1 pr-14">
+                        <div className="flex-1 pr-20">
                             <div className="flex justify-between">
                                 <span className="text-sm font-medium text-slate-800 capitalize">{log.type}</span>
                                 <span className="text-xs text-slate-400">{format(new Date(log.timestamp), 'h:mm a')}</span>
