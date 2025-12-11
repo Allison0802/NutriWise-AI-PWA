@@ -115,6 +115,24 @@ const App: React.FC = () => {
     setView('add');
   };
 
+  const handleCopyLog = (entry: LogEntry) => {
+    const newEntry: LogEntry = {
+        ...entry,
+        id: Date.now().toString(),
+        timestamp: Date.now(), // Set to now
+    };
+    
+    // Add to logs immediately
+    setLogs([newEntry, ...logs]);
+    
+    // Show quick feedback
+    setFeedbackModal({ 
+        isOpen: true, 
+        isLoading: false, 
+        message: "Copied to today's log!" 
+    });
+  };
+
   const handleGenerateAdvice = async () => {
     setIsAdviceLoading(true);
     try {
@@ -278,6 +296,7 @@ const App: React.FC = () => {
                 onBack={() => setView('dashboard')} 
                 onEdit={handleEditLog}
                 onDelete={handleDeleteLog}
+                onCopy={handleCopyLog}
             />
         )}
 
@@ -388,7 +407,7 @@ const App: React.FC = () => {
               </div>
               
               <div className="pt-8 text-center">
-                  <p className="text-sm font-bold text-slate-400">NutriWise AI <span className="text-red-500 font-extrabold text-lg">v1.3.1</span></p>
+                  <p className="text-sm font-bold text-slate-400">NutriWise AI <span className="text-red-500 font-extrabold text-lg">v1.3.2</span></p>
               </div>
             </div>
           </div>

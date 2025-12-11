@@ -43,7 +43,17 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
     if (initialEntry) {
       setActiveTab(initialEntry.type);
       if (initialEntry.type === 'food') {
-        setAnalyzedItems(initialEntry.items || []);
+        // Safe loading of items: ensure base values exist for manual editing logic
+        const loadedItems = (initialEntry.items || []).map(item => ({
+            ...item,
+            // Fallback calculation for old logs that didn't have base values
+            baseCalories: item.baseCalories ?? (item.calories / (item.quantity || 1)),
+            baseProtein: item.baseProtein ?? (item.protein / (item.quantity || 1)),
+            baseCarbs: item.baseCarbs ?? (item.carbs / (item.quantity || 1)),
+            baseFat: item.baseFat ?? (item.fat / (item.quantity || 1)),
+        }));
+        setAnalyzedItems(loadedItems);
+
         if (initialEntry.image) setSelectedImage(initialEntry.image);
       } else if (initialEntry.type === 'exercise' && initialEntry.exercise) {
         setExName(initialEntry.exercise.name);

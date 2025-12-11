@@ -2,16 +2,17 @@
 import React, { useMemo } from 'react';
 import { LogEntry } from '../types';
 import { format } from 'date-fns';
-import { Edit2, ArrowLeft, Trash2 } from 'lucide-react';
+import { Edit2, ArrowLeft, Trash2, Copy } from 'lucide-react';
 
 interface HistoryViewProps {
   logs: LogEntry[];
   onBack: () => void;
   onEdit: (entry: LogEntry) => void;
   onDelete: (id: string) => void;
+  onCopy: (entry: LogEntry) => void;
 }
 
-const HistoryView: React.FC<HistoryViewProps> = ({ logs, onBack, onEdit, onDelete }) => {
+const HistoryView: React.FC<HistoryViewProps> = ({ logs, onBack, onEdit, onDelete, onCopy }) => {
   const groupedLogs = useMemo(() => {
     const groups: { [key: string]: LogEntry[] } = {};
     logs.forEach(log => {
@@ -51,7 +52,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ logs, onBack, onEdit, onDelet
                         {log.type === 'food' && log.items?.map((item, idx) => (
                             <div key={idx} className="text-sm text-slate-600 mt-1 flex justify-between">
                                 <span>{item.name} ({item.quantity} {item.unit})</span>
-                                <span className="font-medium">{Math.round(item.calories)} kcal</span>
+                                <span className="font-medium">{Math.round(item.calories || 0)} kcal</span>
                             </div>
                         ))}
                          {log.type === 'exercise' && log.exercise && (
@@ -69,14 +70,23 @@ const HistoryView: React.FC<HistoryViewProps> = ({ logs, onBack, onEdit, onDelet
                     </div>
                     <div className="absolute right-3 top-3 flex gap-1">
                         <button 
+                            onClick={() => onCopy(log)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Copy to Today"
+                        >
+                            <Copy size={16} />
+                        </button>
+                        <button 
                             onClick={() => onEdit(log)}
                             className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                            title="Edit"
                         >
                             <Edit2 size={16} />
                         </button>
                         <button 
                             onClick={() => onDelete(log.id)}
                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete"
                         >
                             <Trash2 size={16} />
                         </button>
