@@ -44,10 +44,9 @@ const HistoryView: React.FC<HistoryViewProps> = ({ logs, onBack, onEdit, onDelet
                 .map(log => (
                 <div key={log.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-start gap-3 relative group">
                     <div className={`mt-1 w-2 h-2 rounded-full ${log.type === 'food' ? 'bg-emerald-400' : log.type === 'exercise' ? 'bg-orange-400' : 'bg-blue-400'}`} />
-                    <div className="flex-1 pr-28">
-                        <div className="flex justify-between">
+                    <div className="flex-1 pr-24 pb-2">
+                        <div className="flex justify-between mb-1">
                             <span className="text-sm font-medium text-slate-800 capitalize">{log.type}</span>
-                            <span className="text-xs text-slate-400">{format(new Date(log.timestamp), 'h:mm a')}</span>
                         </div>
                         {log.type === 'food' && log.items?.map((item, idx) => (
                             <div key={idx} className="text-sm text-slate-600 mt-1 flex justify-between">
@@ -90,6 +89,9 @@ const HistoryView: React.FC<HistoryViewProps> = ({ logs, onBack, onEdit, onDelet
                         >
                             <Trash2 size={16} />
                         </button>
+                    </div>
+                    <div className="absolute right-3 bottom-3 text-xs text-slate-400 font-medium">
+                        {format(new Date(log.timestamp), 'h:mm a')}
                     </div>
                 </div>
               ))}
