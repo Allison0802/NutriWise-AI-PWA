@@ -68,7 +68,7 @@ const callApi = async (action: string, payload: any, retries = 3) => {
 export const analyzeImageOrText = async (
   textInput: string,
   imageBase64?: string
-): Promise<{ items: FoodItem[]; clarification?: string }> => {
+): Promise<{ items: FoodItem[]; clarification?: string; healthTip?: string }> => {
   try {
     // Longer timeout/retries for analysis as it's critical
     const result = await callApi('analyzeImageOrText', { textInput, imageBase64 }, 3);
@@ -97,6 +97,7 @@ export const analyzeImageOrText = async (
     return {
       items: items,
       clarification: result.clarificationNeeded ? result.clarificationQuestion : undefined,
+      healthTip: result.healthTip // Capture the health tip from AI
     };
   } catch (error: any) {
     alert(`Analysis failed: ${error.message}`);

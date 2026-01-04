@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 
 // Helper to robustly extract JSON from AI text response
@@ -44,9 +45,10 @@ const foodAnalysisSchema: any = {
       },
     },
     clarificationNeeded: { type: Type.BOOLEAN, description: "True if the AI needs more info to be accurate" },
-    clarificationQuestion: { type: Type.STRING, description: "Question to ask the user if clarification is needed" }
+    clarificationQuestion: { type: Type.STRING, description: "Question to ask the user if clarification is needed" },
+    healthTip: { type: Type.STRING, description: "A short, encouraging, specific 1-sentence health observation or tip about this meal (e.g. 'Great source of fiber', 'Good protein for muscle')." }
   },
-  required: ["items", "clarificationNeeded"],
+  required: ["items", "clarificationNeeded", "healthTip"],
 };
 
 const refinementSchema: any = {
@@ -172,7 +174,7 @@ export default async function handler(req: any, res: any) {
             config: {
               responseMimeType: "application/json",
               responseSchema: foodAnalysisSchema,
-              systemInstruction: "You are a specialized nutritionist AI. Your estimates should be evidence-based. If an image is blurry or ambiguous, mark confidence as low.",
+              systemInstruction: "You are a specialized nutritionist AI. Calculate precise nutrition. Also provide a 'healthTip': a short, specific, encouraging sentence about the nutritional value of this specific meal (e.g. 'Great source of lean protein!').",
             },
           });
       });

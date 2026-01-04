@@ -7,7 +7,7 @@ import { Camera, Image as ImageIcon, Loader2, Plus, X, Check, Mic, Calculator, M
 const STARTER_MESSAGE = 'Hi! I can help you analyze your nutrition logs, suggest meals, or answer health questions. What can I do for you?';
 
 interface EntryFormProps {
-  onSave: (entry: LogEntry) => void;
+  onSave: (entry: LogEntry, aiFeedback?: string) => void;
   onCancel: () => void;
   userProfile?: UserProfile;
   initialEntry?: LogEntry | null;
@@ -23,6 +23,7 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzedItems, setAnalyzedItems] = useState<FoodItem[] | null>(null);
   const [clarification, setClarification] = useState<string | null>(null);
+  const [aiFeedback, setAiFeedback] = useState<string | null>(null); // State for feedback
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Assistant State
@@ -141,12 +142,16 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
     setIsAnalyzing(true);
     setAnalyzedItems(null);
     setClarification(null);
+    setAiFeedback(null); // Reset feedback
 
     try {
       const result = await analyzeImageOrText(textInput, selectedImage || undefined);
       setAnalyzedItems(result.items);
       if (result.clarification) {
         setClarification(result.clarification);
+      }
+      if (result.healthTip) {
+          setAiFeedback(result.healthTip);
       }
     } catch (error: any) {
       const msg = error.message || "";
@@ -217,7 +222,7 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
       // EXPLICITLY UNDEFINED: Do not save the image to storage
       image: undefined
     };
-    onSave(newEntry);
+    onSave(newEntry, aiFeedback || undefined); // Pass AI feedback if available
   };
 
   const handleEstimateExercise = async () => {

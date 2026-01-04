@@ -107,7 +107,7 @@ const App: React.FC = () => {
     return logs.map(stripImage);
   };
 
-  const handleSaveEntry = async (entry: LogEntry) => {
+  const handleSaveEntry = async (entry: LogEntry, aiFeedback?: string) => {
     try {
         await saveLog(entry); // Save to IndexedDB
         
@@ -122,13 +122,16 @@ const App: React.FC = () => {
         setView('dashboard');
 
         // Show instant feedback
-        const randomMsg = FEEDBACK_MESSAGES[Math.floor(Math.random() * FEEDBACK_MESSAGES.length)];
-        setFeedbackModal({ isOpen: true, isLoading: false, message: randomMsg });
+        // Use AI feedback if provided (from food analysis), otherwise pick a random encouragement
+        const message = aiFeedback || FEEDBACK_MESSAGES[Math.floor(Math.random() * FEEDBACK_MESSAGES.length)];
         
-        // Auto-close modal after 1.5s
+        setFeedbackModal({ isOpen: true, isLoading: false, message: message });
+        
+        // Auto-close modal after 3s if it's AI feedback (longer read), else 1.5s
+        const duration = aiFeedback ? 3500 : 1500;
         setTimeout(() => {
             setFeedbackModal(prev => ({ ...prev, isOpen: false }));
-        }, 1500);
+        }, duration);
     } catch (error) {
         console.error("Failed to save log:", error);
         alert("Failed to save entry. Storage might be full.");
@@ -477,7 +480,7 @@ const App: React.FC = () => {
               </div>
               
               <div className="pt-8 text-center">
-                  <p className="text-sm font-bold text-slate-400">NutriWise AI <span className="text-red-500 font-extrabold text-lg">v1.3.6</span></p>
+                  <p className="text-sm font-bold text-slate-400">NutriWise AI <span className="text-red-500 font-extrabold text-lg">v1.3.7</span></p>
               </div>
             </div>
           </div>
