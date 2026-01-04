@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 
 // Helper to robustly extract JSON from AI text response
@@ -63,10 +62,9 @@ const refinementSchema: any = {
 };
 
 // List of models to try in order of preference.
-// Removed gemini-1.5-flash as it is causing 404s.
+// Compliance: Use gemini-3-flash-preview for basic text tasks.
 const CANDIDATE_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
+    "gemini-3-flash-preview",
     "gemini-flash-latest"
 ];
 
@@ -280,28 +278,6 @@ export default async function handler(req: any, res: any) {
       });
 
       return res.status(200).json({ text: response.text || "No advice available." });
-    }
-
-    if (action === 'getInstantFeedback') {
-      const { entry, profile } = payload;
-      
-      const response = await executeWithFallback(async (model) => {
-          return await genAI.models.generateContent({
-            model: model,
-            contents: `
-              Generate a single, short (max 15 words), encouraging or witty comment for this user's new log entry.
-              Entry: ${JSON.stringify(entry)}
-              User Profile: ${JSON.stringify(profile)}
-              
-              If it's food, comment on nutrients or choice.
-              If it's exercise, comment on effort or burn.
-              If it's a note, be empathetic or responsive to the user's sentiment.
-              Do NOT repeat the food name literally if possible, be natural.
-            `,
-          });
-      });
-
-      return res.status(200).json({ text: response.text });
     }
 
     if (action === 'chatWithNutritionist') {

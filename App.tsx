@@ -5,7 +5,8 @@ import Dashboard from './components/Dashboard';
 import EntryForm from './components/EntryForm';
 import ChatInterface from './components/ChatInterface';
 import HistoryView from './components/HistoryView';
-import { getPersonalizedAdvice, chatWithNutritionist, getInstantFeedback } from './services/geminiService';
+import { getPersonalizedAdvice, chatWithNutritionist } from './services/geminiService';
+import { getAllLogs, saveLog, deleteLog, migrateLogsFromLocalStorage, removeImagesFromLogs } from './services/storage';
 import { Home, PlusCircle, MessageCircle, User, Activity, CheckCircle, X, Loader2, Download, Upload, RefreshCw, AlertTriangle } from 'lucide-react';
 import { isSameDay } from 'date-fns';
 
@@ -21,11 +22,21 @@ const INITIAL_PROFILE: UserProfile = {
   dietaryPreferences: 'none'
 };
 
+const FEEDBACK_MESSAGES = [
+    "Great job tracking!",
+    "Logged successfully!",
+    "Keep up the good work!",
+    "Every entry counts!",
+    "Nutrition tracked!",
+    "You're doing great!",
+    "Saved!",
+    "On track!"
+];
+
 const App: React.FC = () => {
-  const [logs, setLogs] = useState<LogEntry[]>(() => {
-    const saved = localStorage.getItem('nutriwise_logs');
-    return saved ? JSON.parse(saved) : [];
-  });
+  // Logs are now loaded async
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [isAppLoading, setIsAppLoading] = useState(true);
   
   const [profile, setProfile] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('nutriwise_profile');
@@ -55,9 +66,27 @@ const App: React.FC = () => {
     message: null,
   });
 
+  // Initialize DB and load logs
   useEffect(() => {
-    localStorage.setItem('nutriwise_logs', JSON.stringify(logs));
-  }, [logs]);
+    const init = async () => {
+        try {
+            await migrateLogsFromLocalStorage();
+            // Perform cleanup of images to save space as requested
+            await removeImagesFromLogs();
+            
+            const loadedLogs = await getAllLogs();
+            setLogs(loadedLogs.sort((a, b) => b.timestamp - a.timestamp));
+        } catch (error) {
+            console.error("Failed to load logs:", error);
+            alert("Error loading your data. Please try refreshing.");
+        } finally {
+            setIsAppLoading(false);
+        }
+    };
+    init();
+  }, []);
+
+  // Removed useEffect for saving logs to localStorage (it caused QuotaExceededError)
 
   useEffect(() => {
     localStorage.setItem('nutriwise_profile', JSON.stringify(profile));
@@ -79,34 +108,41 @@ const App: React.FC = () => {
   };
 
   const handleSaveEntry = async (entry: LogEntry) => {
-    let updatedLogs;
-    if (editingLog) {
-      updatedLogs = logs.map(l => l.id === entry.id ? entry : l);
-      setEditingLog(null);
-    } else {
-      updatedLogs = [entry, ...logs];
-    }
-    setLogs(updatedLogs);
-    setView('dashboard');
-
-    // Trigger Instant Feedback Modal
-    setFeedbackModal({ isOpen: true, isLoading: true, message: null });
-    
     try {
-        // CRITICAL: Strip image data to save thousands of tokens
-        const cleanEntry = stripImage(entry);
-        const feedback = await getInstantFeedback(cleanEntry, profile);
-        setFeedbackModal({ isOpen: true, isLoading: false, message: feedback });
-    } catch (e) {
-        // Silent failover - if quota exceeded, just show generic success
-        console.warn("Feedback skipped due to API limit");
-        setFeedbackModal({ isOpen: true, isLoading: false, message: "Entry saved successfully!" });
+        await saveLog(entry); // Save to IndexedDB
+        
+        let updatedLogs;
+        if (editingLog) {
+          updatedLogs = logs.map(l => l.id === entry.id ? entry : l);
+          setEditingLog(null);
+        } else {
+          updatedLogs = [entry, ...logs];
+        }
+        setLogs(updatedLogs);
+        setView('dashboard');
+
+        // Show instant feedback
+        const randomMsg = FEEDBACK_MESSAGES[Math.floor(Math.random() * FEEDBACK_MESSAGES.length)];
+        setFeedbackModal({ isOpen: true, isLoading: false, message: randomMsg });
+        
+        // Auto-close modal after 1.5s
+        setTimeout(() => {
+            setFeedbackModal(prev => ({ ...prev, isOpen: false }));
+        }, 1500);
+    } catch (error) {
+        console.error("Failed to save log:", error);
+        alert("Failed to save entry. Storage might be full.");
     }
   };
 
-  const handleDeleteLog = (id: string) => {
+  const handleDeleteLog = async (id: string) => {
     if (window.confirm("Are you sure you want to delete this log?")) {
-        setLogs(logs.filter(l => l.id !== id));
+        try {
+            await deleteLog(id); // Delete from IndexedDB
+            setLogs(logs.filter(l => l.id !== id));
+        } catch (error) {
+            console.error("Failed to delete log:", error);
+        }
     }
   };
 
@@ -115,22 +151,38 @@ const App: React.FC = () => {
     setView('add');
   };
 
-  const handleCopyLog = (entry: LogEntry) => {
+  const handleCopyLog = async (entry: LogEntry) => {
+    // Strip image when copying to ensure we don't duplicate heavy assets
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { image, ...rest } = entry;
+    
     const newEntry: LogEntry = {
-        ...entry,
+        ...rest,
         id: Date.now().toString(),
         timestamp: Date.now(), // Set to now
     };
     
-    // Add to logs immediately
-    setLogs([newEntry, ...logs]);
-    
-    // Show quick feedback
-    setFeedbackModal({ 
-        isOpen: true, 
-        isLoading: false, 
-        message: "Copied to today's log!" 
-    });
+    try {
+        await saveLog(newEntry); // Save to IndexedDB
+        
+        // Add to logs immediately
+        setLogs([newEntry, ...logs]);
+        
+        // Show quick feedback
+        const randomMsg = FEEDBACK_MESSAGES[Math.floor(Math.random() * FEEDBACK_MESSAGES.length)];
+        setFeedbackModal({ 
+            isOpen: true, 
+            isLoading: false, 
+            message: `${randomMsg} (Copied)`
+        });
+
+        setTimeout(() => {
+            setFeedbackModal(prev => ({ ...prev, isOpen: false }));
+        }, 1500);
+    } catch (error) {
+        console.error("Failed to copy log:", error);
+        alert("Failed to copy entry.");
+    }
   };
 
   const handleGenerateAdvice = async () => {
@@ -190,17 +242,27 @@ const App: React.FC = () => {
       const fileReader = new FileReader();
       if (event.target.files && event.target.files.length > 0) {
           fileReader.readAsText(event.target.files[0], "UTF-8");
-          fileReader.onload = e => {
+          fileReader.onload = async (e) => {
               try {
                   if (e.target?.result) {
                       const parsed = JSON.parse(e.target.result as string);
                       if (parsed.profile) setProfile(parsed.profile);
-                      if (parsed.logs) setLogs(parsed.logs);
                       if (parsed.chatHistory) setChatHistory(parsed.chatHistory);
+                      if (parsed.logs && Array.isArray(parsed.logs)) {
+                           // Async import logs to DB
+                           setIsAppLoading(true);
+                           for (const log of parsed.logs) {
+                               await saveLog(log);
+                           }
+                           const allLogs = await getAllLogs();
+                           setLogs(allLogs.sort((a, b) => b.timestamp - a.timestamp));
+                           setIsAppLoading(false);
+                      }
                       alert("Data restored successfully!");
                   }
               } catch (error) {
                   alert("Invalid backup file.");
+                  setIsAppLoading(false);
               }
           };
       }
@@ -224,10 +286,18 @@ const App: React.FC = () => {
           }
           
           // 3. NUCLEAR OPTION: Force a cache-busting navigation
-          // This appends a unique timestamp to the URL, forcing the browser to fetch a fresh index.html
           window.location.href = window.location.pathname + '?reset=' + Date.now();
       }
   };
+
+  if (isAppLoading) {
+      return (
+          <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50">
+              <Loader2 className="w-10 h-10 text-emerald-600 animate-spin mb-4" />
+              <p className="text-slate-500 font-medium">Loading NutriWise...</p>
+          </div>
+      );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 max-w-md mx-auto shadow-2xl overflow-hidden relative">
@@ -407,7 +477,7 @@ const App: React.FC = () => {
               </div>
               
               <div className="pt-8 text-center">
-                  <p className="text-sm font-bold text-slate-400">NutriWise AI <span className="text-red-500 font-extrabold text-lg">v1.3.3</span></p>
+                  <p className="text-sm font-bold text-slate-400">NutriWise AI <span className="text-red-500 font-extrabold text-lg">v1.3.6</span></p>
               </div>
             </div>
           </div>
@@ -453,14 +523,14 @@ const App: React.FC = () => {
             {feedbackModal.isLoading ? (
                 <div className="py-8">
                     <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mx-auto mb-4" />
-                    <p className="text-slate-600 font-medium">Analyzing your entry...</p>
+                    <p className="text-slate-600 font-medium">Saving...</p>
                 </div>
             ) : (
                 <>
                     <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3">
                         <CheckCircle size={28} />
                     </div>
-                    <h3 className="text-lg font-bold text-slate-800 mb-2">Log Saved!</h3>
+                    <h3 className="text-lg font-bold text-slate-800 mb-2">Saved!</h3>
                     <p className="text-slate-600 italic mb-6">"{feedbackModal.message}"</p>
                     <button 
                         onClick={() => setFeedbackModal({ ...feedbackModal, isOpen: false })}

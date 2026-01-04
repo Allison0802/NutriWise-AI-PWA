@@ -54,6 +54,8 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
         }));
         setAnalyzedItems(loadedItems);
 
+        // Even if we don't save images anymore, if an old log has one, we can show it here
+        // But for consistency, we generally rely on text now.
         if (initialEntry.image) setSelectedImage(initialEntry.image);
       } else if (initialEntry.type === 'exercise' && initialEntry.exercise) {
         setExName(initialEntry.exercise.name);
@@ -212,7 +214,8 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
       timestamp: initialEntry ? initialEntry.timestamp : Date.now(),
       type: 'food',
       items: sanitizedItems,
-      image: selectedImage || undefined
+      // EXPLICITLY UNDEFINED: Do not save the image to storage
+      image: undefined
     };
     onSave(newEntry);
   };

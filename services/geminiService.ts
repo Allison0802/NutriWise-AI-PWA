@@ -177,18 +177,6 @@ export const getPersonalizedAdvice = async (
   }
 };
 
-export const getInstantFeedback = async (
-  entry: LogEntry,
-  profile: UserProfile
-): Promise<string> => {
-  try {
-    const result = await callApi('getInstantFeedback', { entry, profile }, 1); // 1 try only for feedback
-    return result.text;
-  } catch (e) {
-    throw e; // Throw so UI can handle silent fallback
-  }
-};
-
 export const chatWithNutritionist = async (
   history: { role: string; parts: { text: string }[] }[],
   message: string,
