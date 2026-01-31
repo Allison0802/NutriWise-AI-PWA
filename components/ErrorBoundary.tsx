@@ -56,7 +56,8 @@ class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    return this.props.children || null;
+    // Cast 'this' to any to bypass TS error about 'props' not existing on ErrorBoundary
+    return (this as any).props.children || null;
   }
 }
 

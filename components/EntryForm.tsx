@@ -1,10 +1,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { FoodItem, LogEntry, ExerciseItem, UserProfile, ChatMessage } from '../types';
+import { FoodItem, LogEntry, UserProfile, ChatMessage } from '../types';
 import { analyzeImageOrText, refineAnalyzedLogs, estimateExerciseCalories } from '../services/geminiService';
-import { Camera, Image as ImageIcon, Loader2, Plus, X, Check, Mic, Calculator, MessageSquare, Send, Zap, Flame, ChevronRight, PenTool } from 'lucide-react';
-
-const STARTER_MESSAGE = 'Hi! I can help you analyze your nutrition logs, suggest meals, or answer health questions. What can I do for you?';
+import { Camera, Loader2, Plus, X, Check, Mic, MessageSquare, Send, Zap, Flame, PenTool, Calendar, Clock } from 'lucide-react';
+import { format } from 'date-fns';
 
 interface EntryFormProps {
   onSave: (entry: LogEntry, aiFeedback?: string) => void;
@@ -23,8 +22,12 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzedItems, setAnalyzedItems] = useState<FoodItem[] | null>(null);
   const [clarification, setClarification] = useState<string | null>(null);
-  const [aiFeedback, setAiFeedback] = useState<string | null>(null); // State for feedback
+  const [aiFeedback, setAiFeedback] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Date/Time State
+  const [dateStr, setDateStr] = useState(() => initialEntry ? format(new Date(initialEntry.timestamp), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'));
+  const [timeStr, setTimeStr] = useState(() => initialEntry ? format(new Date(initialEntry.timestamp), 'HH:mm') : format(new Date(), 'HH:mm'));
 
   // Assistant State
   const [showAssistant, setShowAssistant] = useState(false);
@@ -43,20 +46,20 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
   useEffect(() => {
     if (initialEntry) {
       setActiveTab(initialEntry.type);
+      // Date state is initialized in useState initializer, but if initialEntry changes prop (unlikely but possible), update it
+      const d = new Date(initialEntry.timestamp);
+      setDateStr(format(d, 'yyyy-MM-dd'));
+      setTimeStr(format(d, 'HH:mm'));
+
       if (initialEntry.type === 'food') {
-        // Safe loading of items: ensure base values exist for manual editing logic
         const loadedItems = (initialEntry.items || []).map(item => ({
             ...item,
-            // Fallback calculation for old logs that didn't have base values
             baseCalories: item.baseCalories ?? (item.calories / (item.quantity || 1)),
             baseProtein: item.baseProtein ?? (item.protein / (item.quantity || 1)),
             baseCarbs: item.baseCarbs ?? (item.carbs / (item.quantity || 1)),
             baseFat: item.baseFat ?? (item.fat / (item.quantity || 1)),
         }));
         setAnalyzedItems(loadedItems);
-
-        // Even if we don't save images anymore, if an old log has one, we can show it here
-        // But for consistency, we generally rely on text now.
         if (initialEntry.image) setSelectedImage(initialEntry.image);
       } else if (initialEntry.type === 'exercise' && initialEntry.exercise) {
         setExName(initialEntry.exercise.name);
@@ -83,6 +86,11 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
       };
   };
 
+  const getTimestamp = () => {
+      // Create date from string components to respect local time input
+      return new Date(`${dateStr}T${timeStr}`).getTime();
+  };
+
   const resizeImage = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -94,7 +102,6 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
-          // OPTIMIZATION: Max dimensions 512px
           const MAX_WIDTH = 512;
           const MAX_HEIGHT = 512;
 
@@ -114,9 +121,8 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
-          // Compress to JPEG at 0.5 quality to save bandwidth/tokens
           const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
-          resolve(dataUrl.split(',')[1]); // Return just base64 data
+          resolve(dataUrl.split(',')[1]); 
         };
         img.onerror = (error) => reject(error);
       };
@@ -142,7 +148,7 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
     setIsAnalyzing(true);
     setAnalyzedItems(null);
     setClarification(null);
-    setAiFeedback(null); // Reset feedback
+    setAiFeedback(null);
 
     try {
       const result = await analyzeImageOrText(textInput, selectedImage || undefined);
@@ -200,7 +206,6 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
   const saveFoodLog = () => {
     if (!analyzedItems) return;
     
-    // Sanitize items to ensure all numbers are valid numbers to prevent crashes
     const sanitizedItems = analyzedItems.map(item => ({
         ...item,
         quantity: Number(item.quantity) || 0,
@@ -216,13 +221,12 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
 
     const newEntry: LogEntry = {
       id: initialEntry ? initialEntry.id : Date.now().toString(),
-      timestamp: initialEntry ? initialEntry.timestamp : Date.now(),
+      timestamp: getTimestamp(),
       type: 'food',
       items: sanitizedItems,
-      // EXPLICITLY UNDEFINED: Do not save the image to storage
       image: undefined
     };
-    onSave(newEntry, aiFeedback || undefined); // Pass AI feedback if available
+    onSave(newEntry, aiFeedback || undefined);
   };
 
   const handleEstimateExercise = async () => {
@@ -268,12 +272,12 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
 
       const newEntry: LogEntry = {
           id: initialEntry ? initialEntry.id : Date.now().toString(),
-          timestamp: initialEntry ? initialEntry.timestamp : Date.now(),
+          timestamp: getTimestamp(),
           type: 'exercise',
           exercise: {
               name: exName,
               durationMinutes: parseInt(exDuration),
-              caloriesBurned: calories || 0, // Ensure no NaN
+              caloriesBurned: calories || 0,
               intensity: exIntensity
           }
       };
@@ -283,7 +287,7 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
   const saveNoteLog = () => {
       const newEntry: LogEntry = {
           id: initialEntry ? initialEntry.id : Date.now().toString(),
-          timestamp: initialEntry ? initialEntry.timestamp : Date.now(),
+          timestamp: getTimestamp(),
           type: 'note',
           noteContent: textInput
       }
@@ -297,7 +301,6 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
       const item = newItems[index];
       
       item.quantity = newQty;
-      // Recalculate based on Base Values
       item.calories = Math.round(item.baseCalories * newQty);
       item.protein = Math.round(item.baseProtein * newQty * 10) / 10;
       item.carbs = Math.round(item.baseCarbs * newQty * 10) / 10;
@@ -313,19 +316,15 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
     setAnalyzedItems(newItems);
   };
 
-  // Logic to handle MANUAL macro edits (reverse engineering the base values)
   const updateItemMacro = (index: number, field: 'calories' | 'protein' | 'carbs' | 'fat', value: number) => {
       if (!analyzedItems) return;
       const newItems = [...analyzedItems];
       const item = newItems[index];
 
-      // Update the display value
       item[field] = value;
-      
-      // Update the base value (so future quantity changes scale correctly)
       const qty = item.quantity || 1;
       const baseField = `base${field.charAt(0).toUpperCase() + field.slice(1)}` as keyof FoodItem;
-      // @ts-ignore - dynamic key assignment matches type logic
+      // @ts-ignore
       item[baseField] = value / qty;
 
       setAnalyzedItems(newItems);
@@ -336,7 +335,6 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
-  // --- Normal Form Render ---
   return (
     <div className="bg-white h-full overflow-y-auto pb-20 relative no-scrollbar">
       <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white z-20">
@@ -345,6 +343,29 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
         </button>
         <h2 className="font-semibold text-lg">{initialEntry ? 'Edit Entry' : 'New Entry'}</h2>
         <div className="w-10"></div>
+      </div>
+
+      <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
+         <div className="flex items-center justify-between gap-2 max-w-sm mx-auto">
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 flex-1">
+                 <Calendar size={14} className="text-slate-400" />
+                 <input 
+                    type="date" 
+                    value={dateStr} 
+                    onChange={e => setDateStr(e.target.value)} 
+                    className="bg-transparent text-sm font-medium text-slate-700 focus:outline-none w-full"
+                 />
+            </div>
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 w-28">
+                 <Clock size={14} className="text-slate-400" />
+                 <input 
+                    type="time" 
+                    value={timeStr} 
+                    onChange={e => setTimeStr(e.target.value)} 
+                    className="bg-transparent text-sm font-medium text-slate-700 focus:outline-none w-full"
+                 />
+            </div>
+         </div>
       </div>
 
       <div className="flex p-2 gap-2 justify-center border-b bg-slate-50">
@@ -385,7 +406,6 @@ const EntryForm: React.FC<EntryFormProps> = ({ onSave, onCancel, userProfile, in
                         ref={fileInputRef}
                         type="file" 
                         accept="image/*" 
-                        // capture attribute removed to allow gallery selection
                         className="hidden" 
                         onChange={handleImageUpload}
                     />

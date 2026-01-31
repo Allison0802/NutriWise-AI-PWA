@@ -16,6 +16,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ logs, onBack, onEdit, onDelet
   const groupedLogs = useMemo(() => {
     const groups: { [key: string]: LogEntry[] } = {};
     logs.forEach(log => {
+      // Group by local date string
       const dateKey = format(new Date(log.timestamp), 'yyyy-MM-dd');
       if (!groups[dateKey]) groups[dateKey] = [];
       groups[dateKey].push(log);
@@ -33,10 +34,16 @@ const HistoryView: React.FC<HistoryViewProps> = ({ logs, onBack, onEdit, onDelet
       </div>
 
       <div className="space-y-6">
-        {groupedLogs.map(([dateKey, daysLogs]) => (
+        {groupedLogs.map(([dateKey, daysLogs]) => {
+          // Construct date explicitly from components to avoid UTC/timezone shifts
+          // This ensures if the key is "2023-10-25", it renders as Oct 25th regardless of timezone.
+          const [year, month, day] = dateKey.split('-').map(Number);
+          const displayDate = new Date(year, month - 1, day);
+
+          return (
           <div key={dateKey}>
             <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">
-              {format(new Date(dateKey), 'EEEE, MMM do')}
+              {format(displayDate, 'EEEE, MMM do')}
             </h3>
             <div className="space-y-3">
               {daysLogs
@@ -97,7 +104,8 @@ const HistoryView: React.FC<HistoryViewProps> = ({ logs, onBack, onEdit, onDelet
               ))}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
